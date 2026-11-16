@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Beef, Check, ChevronDown, ChevronRight, ChevronUp, Coffee, Cookie, Copy, Droplets, Dumbbell, FileText, Flame, History, Minus, Moon, Pencil, Plus, RefreshCw, Repeat, Share2, Sparkles, Sun, Target, Timer, Trash2, TrendingUp, Trophy, UserPlus, Users, Utensils, Wheat, X, Zap } from 'lucide-react';
+import { ArrowDown, ArrowUp, Beef, Check, ChevronDown, ChevronRight, ChevronUp, Coffee, Cookie, Copy, Droplets, Dumbbell, FileText, Flame, GripVertical, History, Minus, Moon, Pencil, Plus, RefreshCw, Repeat, Share2, SlidersHorizontal, Sun, Target, Timer, Trash2, TrendingUp, Trophy, UserPlus, Users, Utensils, Wheat, X, Zap } from 'lucide-react';
 import { useGym } from './store';
 import { MUSCLES, calcStreak, e1rm, fmt, friendCodeOf, iso, parseRoutines, todayRoutine, weekSets, weekVol } from './lib';
 import { Bar, Card, Ring, chip, field, muted, primary } from './ui';
@@ -16,28 +16,100 @@ const dayParts = (d) => {
 const trash = 'flex size-8 shrink-0 items-center justify-center rounded-full text-slate-400 hover:bg-rose-50 hover:text-rose-700 dark:hover:bg-rose-500/10 dark:hover:text-rose-300';
 const mmss = (t) => `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`;
 
+// Formatea series, repeticiones y peso de un ejercicio (ej. "4×8-12 · 80 kg")
+const formatExerciseMeta = (e) => {
+  const sets = e.targetSets !== '' && e.targetSets !== undefined ? Number(e.targetSets) : null;
+  const reps = e.targetReps ? String(e.targetReps).trim() : '';
+  const weight = e.defaultWeight !== '' && e.defaultWeight !== undefined ? `${e.defaultWeight} kg` : '';
+  const setsReps = sets && reps
+    ? `${sets}×${reps}`
+    : sets
+      ? `${sets} ${sets === 1 ? 'serie' : 'series'}`
+      : reps
+        ? `${reps} reps`
+        : '';
+  return [setsReps, weight].filter(Boolean).join(' · ');
+};
+
 function RoutineEditor({ routine, onSelect }) {
   const { routines, saveRoutines } = useGym();
   const [name, setName] = useState(routine);
   const [exName, setExName] = useState('');
   const [muscle, setMuscle] = useState(MUSCLES[0]);
+  const [targetSets, setTargetSets] = useState('');
   const [targetReps, setTargetReps] = useState('');
   const [defaultWeight, setDefaultWeight] = useState('');
 
-  useEffect(() => setName(routine), [routine]);
+  // Edición en línea de un ejercicio existente
+  const [editingIdx, setEditingIdx] = useState(null);
+  const [editForm, setEditForm] = useState({ name: '', muscle: MUSCLES[0], targetSets: '', targetReps: '', defaultWeight: '' });
+
+  // Estado para arrastrar y soltar
+  const [dragIdx, setDragIdx] = useState(null);
+  const [overIdx, setOverIdx] = useState(null);
+
+  useEffect(() => {
+    setName(routine);
+    setEditingIdx(null);
+  }, [routine]);
+
   const list = routines[routine] || [];
   const update = (next) => saveRoutines({ ...routines, [routine]: next });
+
+  const moveExercise = (from, to) => {
+    if (to < 0 || to >= list.length || from === to) return;
+    const next = [...list];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    update(next);
+    if (editingIdx === from) setEditingIdx(to);
+    else if (editingIdx !== null) setEditingIdx(null);
+  };
+
+  const startEditExercise = (idx) => {
+    if (editingIdx === idx) {
+      setEditingIdx(null);
+      return;
+    }
+    const item = list[idx];
+    setEditingIdx(idx);
+    setEditForm({
+      name: item.name || '',
+      muscle: item.muscle || MUSCLES[0],
+      targetSets: item.targetSets !== '' && item.targetSets !== undefined ? String(item.targetSets) : '',
+      targetReps: item.targetReps || '',
+      defaultWeight: item.defaultWeight !== '' && item.defaultWeight !== undefined ? String(item.defaultWeight) : '',
+    });
+  };
+
+  const saveEditExercise = (idx) => {
+    const clean = editForm.name.trim();
+    if (!clean) return;
+    const parsedSets = editForm.targetSets.trim() !== '' ? Math.max(1, Math.floor(Number(editForm.targetSets))) : '';
+    const next = list.map((item, i) => (i !== idx ? item : {
+      ...item,
+      name: clean,
+      muscle: editForm.muscle,
+      targetSets: Number.isFinite(parsedSets) && parsedSets > 0 ? parsedSets : '',
+      targetReps: editForm.targetReps.trim(),
+      defaultWeight: editForm.defaultWeight.trim() !== '' ? Number(editForm.defaultWeight.replace(',', '.')) : '',
+    }));
+    update(next);
+    setEditingIdx(null);
+  };
 
   const addExercise = (event) => {
     event.preventDefault();
     if (!exName.trim()) return;
+    const parsedSets = targetSets.trim() !== '' ? Math.max(1, Math.floor(Number(targetSets))) : '';
     update([...list, {
       name: exName.trim(),
       muscle,
+      targetSets: Number.isFinite(parsedSets) && parsedSets > 0 ? parsedSets : '',
       targetReps: targetReps.trim(),
       defaultWeight: defaultWeight.trim() !== '' ? Number(defaultWeight.replace(',', '.')) : '',
     }]);
-    setExName(''); setTargetReps(''); setDefaultWeight('');
+    setExName(''); setTargetSets(''); setTargetReps(''); setDefaultWeight('');
   };
 
   const rename = () => {
@@ -45,6 +117,17 @@ function RoutineEditor({ routine, onSelect }) {
     if (!next || next === routine || routines[next]) { setName(routine); return; }
     saveRoutines(Object.fromEntries(Object.entries(routines).map(([k, v]) => [k === routine ? next : k, v])));
     onSelect(next);
+  };
+
+  const duplicateRoutine = () => {
+    let copyName = `${routine} (copia)`;
+    let k = 2;
+    while (routines[copyName]) {
+      copyName = `${routine} (${k})`;
+      k += 1;
+    }
+    saveRoutines({ ...routines, [copyName]: list.map((e) => ({ ...e })) });
+    onSelect(copyName);
   };
 
   const remove = () => {
@@ -55,31 +138,195 @@ function RoutineEditor({ routine, onSelect }) {
   };
 
   return (
-    <div className="mt-4 space-y-3">
-      <input aria-label="Nombre de la rutina" value={name} maxLength={30} onChange={(e) => setName(e.target.value)} onBlur={rename} className={`${field} w-full font-bold`} />
-      <ul className="space-y-1">
-        {list.map((e, i) => (
-          <li key={i} className="flex items-center justify-between text-sm">
-            <span>
-              {e.name} <span className={muted}>· {e.muscle}</span>
-              {e.targetReps && <span className="ml-2 text-xs font-semibold text-zinc-950 dark:text-white">[{e.targetReps}]</span>}
-            </span>
-            <button type="button" onClick={() => update(list.filter((_, j) => j !== i))} aria-label={`Quitar ${e.name}`} className="flex size-8 items-center justify-center rounded-full text-slate-400 hover:bg-rose-50 hover:text-rose-700 dark:hover:bg-rose-500/10 dark:hover:text-rose-300"><X size={15} /></button>
-          </li>
-        ))}
-      </ul>
-      <form onSubmit={addExercise} className="flex flex-col gap-2">
+    <div className="mt-4 space-y-4">
+      <div>
+        <label className={`mb-1.5 block text-[11px] font-bold uppercase tracking-wider ${muted}`}>Nombre de la rutina</label>
+        <div className="flex items-center gap-2">
+          <input aria-label="Nombre de la rutina" value={name} maxLength={30} onChange={(e) => setName(e.target.value)} onBlur={rename} className={`${field} w-full min-w-0 font-bold`} />
+          <button
+            type="button"
+            onClick={duplicateRoutine}
+            title="Duplicar rutina"
+            aria-label="Duplicar rutina"
+            className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-zinc-200 text-zinc-800 transition-colors hover:bg-zinc-300 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
+          >
+            <Copy size={16} />
+          </button>
+        </div>
+      </div>
+
+      {/* Lista reordenable y editable de ejercicios */}
+      <div>
+        <div className="mb-2 flex items-center justify-between">
+          <span className={`text-[11px] font-bold uppercase tracking-wider ${muted}`}>Orden y ejercicios ({list.length})</span>
+          {list.length > 1 && <span className={`text-[11px] ${muted}`}>Usa ↑↓ o arrastra</span>}
+        </div>
+
+        {list.length === 0 ? (
+          <p className={`rounded-2xl bg-zinc-200/60 p-4 text-center text-xs dark:bg-zinc-800/60 ${muted}`}>
+            Añade ejercicios abajo para empezar a construir esta rutina.
+          </p>
+        ) : (
+          <ul className="space-y-2">
+            {list.map((e, i) => {
+              const isEditingThis = editingIdx === i;
+              const isDragging = dragIdx === i;
+              const isOver = overIdx === i && dragIdx !== null && dragIdx !== i;
+              const meta = formatExerciseMeta(e);
+
+              return (
+                <li
+                  key={`${e.name}-${i}`}
+                  draggable={!isEditingThis}
+                  onDragStart={() => setDragIdx(i)}
+                  onDragOver={(ev) => { ev.preventDefault(); setOverIdx(i); }}
+                  onDragLeave={() => setOverIdx(null)}
+                  onDrop={(ev) => {
+                    ev.preventDefault();
+                    if (dragIdx !== null) moveExercise(dragIdx, i);
+                    setDragIdx(null);
+                    setOverIdx(null);
+                  }}
+                  onDragEnd={() => { setDragIdx(null); setOverIdx(null); }}
+                  className={`rounded-2xl bg-zinc-200/75 p-2.5 transition-all dark:bg-zinc-800/75 ${isDragging ? 'opacity-40' : ''} ${isOver ? 'ring-2 ring-zinc-950 dark:ring-white' : ''}`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className={`cursor-grab touch-none pl-0.5 active:cursor-grabbing ${muted}`} aria-hidden="true">
+                      <GripVertical size={15} />
+                    </span>
+
+                    <span className="flex size-6 shrink-0 items-center justify-center rounded-lg bg-zinc-950 text-[11px] font-extrabold text-white dark:bg-white dark:text-zinc-950">
+                      {String(i + 1).padStart(2, '0')}
+                    </span>
+
+                    <button
+                      type="button"
+                      onClick={() => startEditExercise(i)}
+                      className="min-w-0 flex-1 text-left"
+                    >
+                      <p className="truncate text-sm font-bold">{e.name}</p>
+                      <p className={`truncate text-[11px] ${muted}`}>
+                        {[e.muscle, meta].filter(Boolean).join(' · ')}
+                      </p>
+                    </button>
+
+                    <div className="flex shrink-0 items-center gap-0.5">
+                      <button
+                        type="button"
+                        onClick={() => moveExercise(i, i - 1)}
+                        disabled={i === 0}
+                        aria-label={`Subir ${e.name}`}
+                        className="flex size-7 items-center justify-center rounded-full text-zinc-600 transition-colors hover:bg-zinc-300 disabled:opacity-25 dark:text-zinc-300 dark:hover:bg-zinc-700"
+                      >
+                        <ArrowUp size={14} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => moveExercise(i, i + 1)}
+                        disabled={i === list.length - 1}
+                        aria-label={`Bajar ${e.name}`}
+                        className="flex size-7 items-center justify-center rounded-full text-zinc-600 transition-colors hover:bg-zinc-300 disabled:opacity-25 dark:text-zinc-300 dark:hover:bg-zinc-700"
+                      >
+                        <ArrowDown size={14} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => startEditExercise(i)}
+                        aria-label={`Editar ${e.name}`}
+                        className={`flex size-7 items-center justify-center rounded-full transition-colors ${isEditingThis ? 'bg-zinc-950 text-white dark:bg-white dark:text-zinc-950' : 'text-zinc-600 hover:bg-zinc-300 dark:text-zinc-300 dark:hover:bg-zinc-700'}`}
+                      >
+                        <Pencil size={13} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { update(list.filter((_, j) => j !== i)); setEditingIdx(null); }}
+                        aria-label={`Quitar ${e.name}`}
+                        className="flex size-7 items-center justify-center rounded-full text-slate-400 hover:bg-rose-500/15 hover:text-rose-600 dark:hover:text-rose-400"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Formulario desplegable para editar este ejercicio */}
+                  {isEditingThis && (
+                    <div className="mt-2.5 space-y-2 border-t border-zinc-300/80 pt-2.5 dark:border-zinc-700">
+                      <div className="flex gap-2">
+                        <input
+                          aria-label="Editar nombre"
+                          value={editForm.name}
+                          onChange={(ev) => setEditForm((v) => ({ ...v, name: ev.target.value }))}
+                          className={`${field} !h-9 w-full min-w-0 bg-white px-2.5 text-xs font-bold dark:bg-zinc-900`}
+                        />
+                        <select
+                          aria-label="Editar músculo"
+                          value={editForm.muscle}
+                          onChange={(ev) => setEditForm((v) => ({ ...v, muscle: ev.target.value }))}
+                          className={`${field} !h-9 shrink-0 bg-white px-2 text-xs dark:bg-zinc-900`}
+                        >
+                          {MUSCLES.map((m) => <option key={m}>{m}</option>)}
+                        </select>
+                      </div>
+                      <div className="flex gap-1.5">
+                        <input
+                          inputMode="numeric"
+                          aria-label="Editar series"
+                          placeholder="Series"
+                          value={editForm.targetSets}
+                          onChange={(ev) => setEditForm((v) => ({ ...v, targetSets: ev.target.value }))}
+                          className={`${field} !h-9 w-full min-w-0 bg-white px-2 text-center text-xs font-semibold dark:bg-zinc-900`}
+                        />
+                        <input
+                          aria-label="Editar repeticiones objetivo"
+                          placeholder="Reps (8-12)"
+                          value={editForm.targetReps}
+                          onChange={(ev) => setEditForm((v) => ({ ...v, targetReps: ev.target.value }))}
+                          className={`${field} !h-9 w-full min-w-0 bg-white px-2 text-center text-xs font-semibold dark:bg-zinc-900`}
+                        />
+                        <input
+                          inputMode="decimal"
+                          aria-label="Editar peso base"
+                          placeholder="Kg"
+                          value={editForm.defaultWeight}
+                          onChange={(ev) => setEditForm((v) => ({ ...v, defaultWeight: ev.target.value }))}
+                          className={`${field} !h-9 w-full min-w-0 bg-white px-2 text-center text-xs font-semibold dark:bg-zinc-900`}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => saveEditExercise(i)}
+                          aria-label="Guardar cambios"
+                          className="flex h-9 shrink-0 items-center gap-1 rounded-xl bg-zinc-950 px-3 text-xs font-extrabold text-white dark:bg-white dark:text-zinc-950"
+                        >
+                          <Check size={14} /> OK
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+
+      {/* Añadir nuevo ejercicio con Series, Reps y Peso */}
+      <form onSubmit={addExercise} className="space-y-2 rounded-2xl border border-zinc-200 p-3 dark:border-zinc-800">
+        <p className={`text-[11px] font-bold uppercase tracking-wider ${muted}`}>Añadir ejercicio</p>
         <div className="flex gap-2">
-          <input aria-label="Nuevo ejercicio" placeholder="Nuevo ejercicio" value={exName} onChange={(e) => setExName(e.target.value)} className={`${field} w-full min-w-0`} />
+          <input aria-label="Nuevo ejercicio" placeholder="Nombre del ejercicio" value={exName} onChange={(e) => setExName(e.target.value)} className={`${field} w-full min-w-0`} />
           <select aria-label="Músculo" value={muscle} onChange={(e) => setMuscle(e.target.value)} className={`${field} shrink-0 px-2`}>{MUSCLES.map((m) => <option key={m}>{m}</option>)}</select>
         </div>
-        <div className="flex gap-2">
-          <input aria-label="Baremo" placeholder="Reps (ej: 8-12)" value={targetReps} onChange={(e) => setTargetReps(e.target.value)} className={`${field} w-full min-w-0`} />
-          <input inputMode="decimal" aria-label="Peso base" placeholder="Peso base (kg)" value={defaultWeight} onChange={(e) => setDefaultWeight(e.target.value)} className={`${field} w-full min-w-0`} />
+        <div className="flex gap-1.5">
+          <input inputMode="numeric" aria-label="Series" placeholder="Series (ej: 4)" value={targetSets} onChange={(e) => setTargetSets(e.target.value)} className={`${field} w-full min-w-0 px-2 text-center`} />
+          <input aria-label="Baremo" placeholder="Reps (8-12)" value={targetReps} onChange={(e) => setTargetReps(e.target.value)} className={`${field} w-full min-w-0 px-2 text-center`} />
+          <input inputMode="decimal" aria-label="Peso base" placeholder="Peso (kg)" value={defaultWeight} onChange={(e) => setDefaultWeight(e.target.value)} className={`${field} w-full min-w-0 px-2 text-center`} />
           <button type="submit" aria-label="Añadir ejercicio" className="flex size-11 shrink-0 items-center justify-center rounded-full bg-zinc-950 text-white dark:bg-white dark:text-zinc-950"><Plus size={18} /></button>
         </div>
       </form>
-      <button type="button" onClick={remove} disabled={Object.keys(routines).length < 2} className={`inline-flex items-center gap-1 text-sm font-semibold disabled:opacity-40 ${bad}`}><Trash2 size={15} />Eliminar rutina</button>
+
+      <button type="button" onClick={remove} disabled={Object.keys(routines).length < 2} className={`inline-flex items-center gap-1 text-sm font-semibold disabled:opacity-40 ${bad}`}>
+        <Trash2 size={15} />Eliminar rutina
+      </button>
     </div>
   );
 }
@@ -131,7 +378,7 @@ function ImportRoutines({ onDone }) {
               <li key={i} className="flex items-center gap-2 text-sm">
                 <span className="min-w-0 flex-1">
                   <span className="block truncate">{e.name}</span>
-                  <span className={`text-xs ${muted}`}>{[e.targetReps, e.defaultWeight !== '' && `${e.defaultWeight} kg`].filter(Boolean).join(' · ') || 'Sin series ni peso'}</span>
+                  <span className={`text-xs ${muted}`}>{formatExerciseMeta(e) || 'Sin series ni peso'}</span>
                 </span>
                 <select aria-label={`Músculo de ${e.name}`} value={e.muscle} onChange={(ev) => setMuscle(ri, i, ev.target.value)} className={`${field} h-9 shrink-0 px-2 ${e.review ? 'ring-2 ring-amber-400' : ''}`}>{MUSCLES.map((m) => <option key={m}>{m}</option>)}</select>
               </li>
@@ -265,6 +512,7 @@ export function Home({ go, routine, activeDate }) {
 
   const exercises = routines[routine] || [];
   const musclesInRoutine = [...new Set(exercises.map((e) => e.muscle))];
+  const plannedSetsTotal = exercises.reduce((t, e) => t + (Number(e.targetSets) || 0), 0);
 
   const dayMeals = meals.filter((m) => m.date === activeDate);
   const dayKcal = dayMeals.reduce((t, m) => t + m.kcal, 0);
@@ -445,6 +693,7 @@ export function Home({ go, routine, activeDate }) {
                 <p className="text-3xl font-extrabold leading-none tracking-tight">{routine}</p>
                 <p className={`mt-1.5 text-xs font-medium ${muted}`}>
                   {exercises.length} {exercises.length === 1 ? 'ejercicio' : 'ejercicios'}
+                  {plannedSetsTotal > 0 && ` · ${plannedSetsTotal} series`}
                   {musclesInRoutine.length > 0 && ` · ${musclesInRoutine.join(' · ')}`}
                 </p>
               </div>
@@ -456,29 +705,25 @@ export function Home({ go, routine, activeDate }) {
               </p>
             ) : (
               <ol className="mt-4 space-y-2">
-                {exercises.map((e, idx) => (
-                  <li key={e.name} className="flex items-center justify-between gap-3 rounded-2xl bg-zinc-200/70 px-3.5 py-2.5 dark:bg-zinc-800/70">
-                    <div className="flex min-w-0 items-center gap-2.5">
-                      <span className={`text-xs font-extrabold ${muted}`}>
-                        {String(idx + 1).padStart(2, '0')}
-                      </span>
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-bold">{e.name}</p>
-                        {(e.targetReps || (e.defaultWeight !== '' && e.defaultWeight !== undefined)) && (
-                          <p className={`text-[11px] ${muted}`}>
-                            {[
-                              e.targetReps && `${e.targetReps} reps`,
-                              e.defaultWeight !== '' && e.defaultWeight !== undefined && `${e.defaultWeight} kg`,
-                            ].filter(Boolean).join(' · ')}
-                          </p>
-                        )}
+                {exercises.map((e, idx) => {
+                  const meta = formatExerciseMeta(e);
+                  return (
+                    <li key={e.name} className="flex items-center justify-between gap-3 rounded-2xl bg-zinc-200/70 px-3.5 py-2.5 dark:bg-zinc-800/70">
+                      <div className="flex min-w-0 items-center gap-2.5">
+                        <span className={`text-xs font-extrabold ${muted}`}>
+                          {String(idx + 1).padStart(2, '0')}
+                        </span>
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-bold">{e.name}</p>
+                          {meta && <p className={`text-[11px] ${muted}`}>{meta}</p>}
+                        </div>
                       </div>
-                    </div>
-                    <span className="shrink-0 rounded-full bg-white px-2.5 py-0.5 text-[11px] font-bold text-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">
-                      {e.muscle}
-                    </span>
-                  </li>
-                ))}
+                      <span className="shrink-0 rounded-full bg-white px-2.5 py-0.5 text-[11px] font-bold text-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">
+                        {e.muscle}
+                      </span>
+                    </li>
+                  );
+                })}
               </ol>
             )}
 
@@ -658,7 +903,6 @@ export function Friends() {
       return;
     }
 
-    // 1. Buscar cuenta local por código de amigo
     const matched = localUsers.find((u) => {
       const uCode = friendCodeOf(u).toUpperCase();
       return uCode === normalized || u.id.toUpperCase() === raw.toUpperCase();
@@ -681,7 +925,6 @@ export function Friends() {
       return;
     }
 
-    // 2. Validar formato de código o crear enlace con el código introducido
     const validCode = /^GYM-[A-Z0-9]{4,8}$/.test(normalized);
     if (!validCode) {
       setFeedback('Introduce un código válido (ej. GYM-A1B2C3).');
@@ -707,9 +950,9 @@ export function Friends() {
       topLift: { ex: 'Press banca', kg: 88 },
       routineName: 'Torso Completo',
       exercises: [
-        { name: 'Press inclinado', muscle: 'Pecho', targetReps: '3×8', defaultWeight: 70 },
-        { name: 'Dominadas', muscle: 'Espalda', targetReps: '4×8', defaultWeight: '' },
-        { name: 'Remo en polea', muscle: 'Espalda', targetReps: '3×12', defaultWeight: 60 },
+        { name: 'Press inclinado', muscle: 'Pecho', targetSets: 3, targetReps: '8', defaultWeight: 70 },
+        { name: 'Dominadas', muscle: 'Espalda', targetSets: 4, targetReps: '8', defaultWeight: '' },
+        { name: 'Remo en polea', muscle: 'Espalda', targetSets: 3, targetReps: '12', defaultWeight: 60 },
       ],
       baseReactions: { '🔥': 1, '💪': 2 },
     });
@@ -743,7 +986,6 @@ export function Friends() {
 
   return (
     <div className="space-y-4">
-      {/* Cabecera social + tu código de amigo */}
       <Card className="!p-4">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2.5">
@@ -773,7 +1015,6 @@ export function Friends() {
           </button>
         </div>
 
-        {/* Tarjeta siempre accesible con tu código de amigo generado */}
         <div className="mt-3.5 flex items-center justify-between gap-2 rounded-2xl bg-zinc-200/70 px-3.5 py-2.5 dark:bg-zinc-800/70">
           <div className="min-w-0">
             <p className={`text-[10px] font-bold uppercase tracking-wider ${muted}`}>Tu código de amigo</p>
@@ -800,7 +1041,6 @@ export function Friends() {
           </div>
         </div>
 
-        {/* Panel desplegable para añadir código de amigo */}
         {connectOpen && (
           <div className="mt-3.5 space-y-3 border-t border-zinc-200 pt-3.5 dark:border-zinc-800">
             <form onSubmit={handleConnect} className="flex gap-2">
@@ -821,7 +1061,6 @@ export function Friends() {
               <p role="status" className="text-xs font-semibold text-rose-600 dark:text-rose-400">{feedback}</p>
             )}
 
-            {/* Cuentas creadas en este dispositivo (mostrando su código, nunca su email) */}
             {otherLocalUsers.length > 0 && (
               <div className="space-y-1.5 pt-1">
                 <p className={`text-[11px] font-bold uppercase tracking-wider ${muted}`}>Perfiles en este dispositivo</p>
@@ -846,7 +1085,6 @@ export function Friends() {
         )}
       </Card>
 
-      {/* Feed de amigos */}
       {hydratedFriends.length === 0 ? (
         <Card className="text-center">
           <Users size={22} className={`mx-auto ${muted}`} />
@@ -904,7 +1142,6 @@ export function Friends() {
                   </div>
                 </div>
 
-                {/* Progreso semanal del amigo */}
                 <div className="grid grid-cols-2 gap-2.5">
                   <div className="rounded-2xl bg-zinc-200/70 p-3 dark:bg-zinc-800/70">
                     <div className="flex items-center justify-between gap-1">
@@ -941,7 +1178,6 @@ export function Friends() {
                   </div>
                 </div>
 
-                {/* Rutina actual del amigo */}
                 <div className="rounded-2xl bg-zinc-200/50 p-3.5 dark:bg-zinc-800/50">
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex min-w-0 items-center gap-2">
@@ -966,15 +1202,18 @@ export function Friends() {
                     <p className={`mt-2 text-xs ${muted}`}>Sin ejercicios configurados.</p>
                   ) : (
                     <ul className="mt-2.5 space-y-1.5">
-                      {visibleExercises.map((ex, i) => (
-                        <li key={i} className="flex items-center justify-between text-xs">
-                          <span className="truncate font-semibold">
-                            {ex.name}
-                            {ex.targetReps && <span className={`ml-1.5 font-normal ${muted}`}>({ex.targetReps})</span>}
-                          </span>
-                          <span className={`ml-2 shrink-0 text-[11px] font-bold ${muted}`}>{ex.muscle}</span>
-                        </li>
-                      ))}
+                      {visibleExercises.map((ex, i) => {
+                        const meta = formatExerciseMeta(ex);
+                        return (
+                          <li key={i} className="flex items-center justify-between text-xs">
+                            <span className="truncate font-semibold">
+                              {ex.name}
+                              {meta && <span className={`ml-1.5 font-normal ${muted}`}>({meta})</span>}
+                            </span>
+                            <span className={`ml-2 shrink-0 text-[11px] font-bold ${muted}`}>{ex.muscle}</span>
+                          </li>
+                        );
+                      })}
                     </ul>
                   )}
 
@@ -989,7 +1228,6 @@ export function Friends() {
                   )}
                 </div>
 
-                {/* 5 reacciones rápidas con emojis */}
                 <div className="flex items-center justify-between gap-1.5 pt-0.5">
                   {QUICK_EMOJIS.map((emoji) => {
                     const active = !!myReacts[emoji];
@@ -1025,7 +1263,7 @@ export function Friends() {
 // Valores que se rellenan solos al elegir un ejercicio: lo configurado en la rutina y, si no hay, lo último que hiciste.
 const startValues = (ex, last) => ({
   kg: ex && ex.defaultWeight !== '' && ex.defaultWeight !== undefined ? String(ex.defaultWeight) : last ? String(last.kg) : '',
-  reps: ex?.targetReps?.split('×').pop().match(/\d+/)?.[0] || (last ? String(last.reps) : ''),
+  reps: ex?.targetReps ? String(ex.targetReps).split('×').pop().match(/\d+/)?.[0] || '' : (last ? String(last.reps) : ''),
 });
 
 const ITEM = 64, MAX_REPS = 60;
@@ -1061,28 +1299,62 @@ function RepsPicker({ value, onChange }) {
 }
 
 export function Workout({ routine, go, activeDate }) {
-  const { addSession, sessions, routines, draft, saveDraft, user, friendCode } = useGym();
-  const exercises = routines[routine] || [];
-  const [name, setName] = useState(exercises[0]?.name || '');
-  const [sets, setSets] = useState(() => (draft?.routine === routine && draft.date === activeDate ? draft.sets : []));
+  const { addSession, sessions, routines, saveRoutines, draft, saveDraft, user, friendCode } = useGym();
+  const baseExercises = routines[routine] || [];
+  const activeDraft = draft?.routine === routine && draft.date === activeDate ? draft : null;
+
+  // Lista editable y reordenable de ejercicios para la sesión actual
+  const [sessionExercises, setSessionExercises] = useState(() => {
+    if (activeDraft?.exercises?.length) return activeDraft.exercises;
+    if (activeDraft?.sets?.length) {
+      const seen = new Set(baseExercises.map((e) => e.name));
+      const extras = [];
+      activeDraft.sets.forEach((s) => {
+        if (!seen.has(s.ex)) {
+          seen.add(s.ex);
+          extras.push({ name: s.ex, muscle: s.muscle || MUSCLES[0] });
+        }
+      });
+      return [...baseExercises, ...extras];
+    }
+    return baseExercises;
+  });
+
+  const [name, setName] = useState(() => sessionExercises[0]?.name || '');
+  const [sets, setSets] = useState(() => activeDraft?.sets || []);
   const [input, setInput] = useState({ kg: '', reps: '' });
   const [rest, setRest] = useState(0);
   const [targetRest, setTargetRest] = useState(90);
   const [finishedSession, setFinishedSession] = useState(null);
   const [shareStatus, setShareStatus] = useState('');
+
+  // Panel de organizar ejercicios durante el entreno
+  const [organizing, setOrganizing] = useState(false);
+  const [extraName, setExtraName] = useState('');
+  const [extraMuscle, setExtraMuscle] = useState(MUSCLES[0]);
+  const [extraSets, setExtraSets] = useState('');
+  const [orderSavedNotice, setOrderSavedNotice] = useState(false);
+
+  // Edición en línea de una serie ya registrada
+  const [editingSetIdx, setEditingSetIdx] = useState(null);
+  const [editSetForm, setEditSetForm] = useState({ kg: '', reps: '' });
+
   const wasResting = useRef(false);
 
   const myCode = friendCode || friendCodeOf(user);
-  const currentEx = exercises.find((e) => e.name === name);
+  const currentEx = sessionExercises.find((e) => e.name === name);
   const hasBase = currentEx?.defaultWeight !== '' && currentEx?.defaultWeight !== undefined;
   const last = [...sessions].reverse().flatMap((x) => [...x.sets].reverse()).find((x) => x.ex === name);
   const bestBefore = Math.max(0, ...sessions.flatMap((x) => x.sets).filter((x) => x.ex === name).map((x) => e1rm(x.kg, x.reps)));
   const mine = sets.map((x, idx) => ({ ...x, idx })).filter((x) => x.ex === name);
   const reps = Number(input.reps) || last?.reps || 10;
-  const completedCount = exercises.filter((e) => sets.some((x) => x.ex === e.name)).length;
+  const completedCount = sessionExercises.filter((e) => sets.some((x) => x.ex === e.name)).length;
   const sessionVol = sets.reduce((t, x) => t + x.kg * x.reps, 0);
 
-  useEffect(() => { setInput(startValues(currentEx, last)); }, [name]);
+  useEffect(() => {
+    setInput(startValues(currentEx, last));
+    setEditingSetIdx(null);
+  }, [name]);
 
   // Descanso: cuenta atrás y vibración al terminar.
   useEffect(() => {
@@ -1095,9 +1367,57 @@ export function Workout({ routine, go, activeDate }) {
     return undefined;
   }, [rest]);
 
-  const commit = (next) => {
-    setSets(next);
-    saveDraft(next.length ? { routine, date: activeDate, sets: next } : null);
+  const commit = (nextSets, nextExercises = sessionExercises) => {
+    setSets(nextSets);
+    const hasCustomOrder = JSON.stringify(nextExercises) !== JSON.stringify(baseExercises);
+    saveDraft(nextSets.length || hasCustomOrder ? { routine, date: activeDate, sets: nextSets, exercises: nextExercises } : null);
+  };
+
+  const moveSessionExercise = (from, to) => {
+    if (to < 0 || to >= sessionExercises.length || from === to) return;
+    const next = [...sessionExercises];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    setSessionExercises(next);
+    commit(sets, next);
+  };
+
+  const addExtraExercise = (e) => {
+    e.preventDefault();
+    const clean = extraName.trim();
+    if (!clean) return;
+    const parsedSets = extraSets.trim() !== '' ? Math.max(1, Math.floor(Number(extraSets))) : '';
+    const existing = sessionExercises.find((x) => x.name.toLowerCase() === clean.toLowerCase());
+    if (existing) {
+      setName(existing.name);
+    } else {
+      const next = [...sessionExercises, {
+        name: clean,
+        muscle: extraMuscle,
+        targetSets: Number.isFinite(parsedSets) && parsedSets > 0 ? parsedSets : '',
+      }];
+      setSessionExercises(next);
+      setName(clean);
+      commit(sets, next);
+    }
+    setExtraName('');
+    setExtraSets('');
+  };
+
+  const removeSessionExercise = (idx) => {
+    const target = sessionExercises[idx];
+    if (!target || sets.some((s) => s.ex === target.name)) return;
+    const next = sessionExercises.filter((_, i) => i !== idx);
+    setSessionExercises(next);
+    if (name === target.name) setName(next[0]?.name || '');
+    commit(sets, next);
+  };
+
+  const orderChanged = JSON.stringify(sessionExercises) !== JSON.stringify(baseExercises);
+  const saveOrderToRoutine = () => {
+    saveRoutines({ ...routines, [routine]: sessionExercises });
+    setOrderSavedNotice(true);
+    setTimeout(() => setOrderSavedNotice(false), 2000);
   };
 
   const push = (kg, r) => {
@@ -1114,6 +1434,39 @@ export function Workout({ routine, go, activeDate }) {
     const typed = input.kg.trim();
     const kg = typed !== '' ? Number(typed.replace(',', '.')) : hasBase ? Number(currentEx.defaultWeight) : last?.kg;
     push(kg, reps);
+  };
+
+  const addQuickSet = () => {
+    const lastMine = mine.at(-1);
+    if (lastMine) {
+      push(lastMine.kg, lastMine.reps);
+      return;
+    }
+    const typed = input.kg.trim();
+    const kg = typed !== '' ? Number(typed.replace(',', '.')) : hasBase ? Number(currentEx.defaultWeight) : (last?.kg ?? 0);
+    push(Number.isFinite(kg) ? kg : 0, reps);
+  };
+
+  const startEditSet = (setObj) => {
+    if (editingSetIdx === setObj.idx) {
+      setEditingSetIdx(null);
+      return;
+    }
+    setEditingSetIdx(setObj.idx);
+    setEditSetForm({ kg: String(setObj.kg), reps: String(setObj.reps) });
+  };
+
+  const saveEditSet = (idx) => {
+    const kg = Number(String(editSetForm.kg).replace(',', '.'));
+    const r = Math.floor(Number(editSetForm.reps));
+    if (!(kg >= 0) || !(r > 0)) return;
+    const next = sets.map((item, i) => {
+      if (i !== idx) return item;
+      const pr = bestBefore > 0 && e1rm(kg, r) > bestBefore;
+      return { ...item, kg, reps: r, ...(pr ? { pr: true } : { pr: undefined }) };
+    });
+    commit(next);
+    setEditingSetIdx(null);
   };
 
   const stepKg = (delta) => {
@@ -1187,7 +1540,6 @@ export function Workout({ routine, go, activeDate }) {
             {finishedSession.name} · {shortDate(finishedSession.date)}
           </p>
 
-          {/* Resumen de métricas de la sesión */}
           <div className="mt-5 grid grid-cols-3 gap-2">
             <div className="rounded-2xl bg-zinc-200/70 p-3 dark:bg-zinc-800/70">
               <p className={`text-[10px] font-bold uppercase tracking-wider ${muted}`}>Volumen</p>
@@ -1203,7 +1555,6 @@ export function Workout({ routine, go, activeDate }) {
             </div>
           </div>
 
-          {/* Desglose de ejercicios realizados */}
           <ul className="mt-4 space-y-2 text-left">
             {groupedExercises.map((g) => (
               <li key={g.name} className="flex items-center justify-between gap-2 rounded-2xl bg-zinc-200/50 px-3.5 py-2.5 text-xs dark:bg-zinc-800/50">
@@ -1225,7 +1576,6 @@ export function Workout({ routine, go, activeDate }) {
             ))}
           </ul>
 
-          {/* Código de amigo incluido al compartir */}
           <div className="mt-4 flex items-center justify-between rounded-2xl border border-zinc-200 px-3.5 py-2.5 text-left dark:border-zinc-800">
             <div>
               <p className={`text-[10px] font-bold uppercase tracking-wider ${muted}`}>Tu código de amigo</p>
@@ -1270,12 +1620,12 @@ export function Workout({ routine, go, activeDate }) {
     );
   }
 
-  // Previsualización en vivo del 1RM estimado para la serie actual
   const typedKg = input.kg.trim();
   const resolvedKg = typedKg !== '' ? Number(typedKg.replace(',', '.')) : hasBase ? Number(currentEx.defaultWeight) : last?.kg;
   const preview1rm = Number.isFinite(resolvedKg) && resolvedKg > 0 && reps > 0 ? e1rm(resolvedKg, reps) : 0;
   const currentBest = Math.max(bestBefore, ...sets.filter((x) => x.ex === name).map((x) => e1rm(x.kg, x.reps)));
   const willBePr = bestBefore > 0 && preview1rm > currentBest;
+  const targetMeta = currentEx ? formatExerciseMeta(currentEx) : '';
 
   return (
     <div className="space-y-4">
@@ -1291,27 +1641,45 @@ export function Workout({ routine, go, activeDate }) {
             </div>
             <div className="mt-1.5 flex items-baseline gap-2">
               <span className="text-3xl font-extrabold leading-none tracking-tight">
-                {completedCount}<span className={`text-lg font-bold ${muted}`}>/{exercises.length}</span>
+                {completedCount}<span className={`text-lg font-bold ${muted}`}>/{sessionExercises.length}</span>
               </span>
               <span className={`text-xs font-semibold ${muted}`}>ejercicios</span>
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={finish}
-            disabled={!sets.length}
-            className="inline-flex h-11 shrink-0 items-center gap-1.5 rounded-full bg-zinc-950 px-5 text-sm font-bold text-white transition-all hover:bg-zinc-800 disabled:bg-zinc-200 disabled:text-zinc-400 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200 dark:disabled:bg-zinc-800 dark:disabled:text-zinc-600"
-          >
-            <Check size={16} strokeWidth={2.5} />
-            Terminar
-          </button>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setOrganizing((v) => !v)}
+              aria-expanded={organizing}
+              aria-label="Organizar ejercicios"
+              title="Reordenar o añadir ejercicios"
+              className={`inline-flex h-11 items-center gap-1.5 rounded-full px-3.5 text-xs font-extrabold transition-colors ${
+                organizing
+                  ? 'bg-zinc-950 text-white dark:bg-white dark:text-zinc-950'
+                  : 'bg-zinc-200 text-zinc-800 hover:bg-zinc-300 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700'
+              }`}
+            >
+              {organizing ? <X size={15} /> : <SlidersHorizontal size={15} />}
+              <span className="hidden sm:inline">{organizing ? 'Listo' : 'Orden'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={finish}
+              disabled={!sets.length}
+              className="inline-flex h-11 shrink-0 items-center gap-1.5 rounded-full bg-zinc-950 px-5 text-sm font-bold text-white transition-all hover:bg-zinc-800 disabled:bg-zinc-200 disabled:text-zinc-400 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200 dark:disabled:bg-zinc-800 dark:disabled:text-zinc-600"
+            >
+              <Check size={16} strokeWidth={2.5} />
+              Terminar
+            </button>
+          </div>
         </div>
 
         {/* Barra de progreso por ejercicio */}
-        {exercises.length > 0 && (
-          <div className="mt-3.5 grid gap-1" style={{ gridTemplateColumns: `repeat(${exercises.length}, minmax(0, 1fr))` }} aria-hidden="true">
-            {exercises.map((e) => {
+        {sessionExercises.length > 0 && (
+          <div className="mt-3.5 grid gap-1" style={{ gridTemplateColumns: `repeat(${sessionExercises.length}, minmax(0, 1fr))` }} aria-hidden="true">
+            {sessionExercises.map((e) => {
               const done = sets.some((x) => x.ex === e.name);
               const active = e.name === name;
               return (
@@ -1337,8 +1705,115 @@ export function Workout({ routine, go, activeDate }) {
         </div>
       </Card>
 
+      {/* Panel desplegable para reordenar ejercicios o añadir extras durante el entreno */}
+      {organizing && (
+        <Card className="space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-bold">Organizar ejercicios del entreno</p>
+              <p className={`text-xs ${muted}`}>Mueve el orden o añade un ejercicio extra</p>
+            </div>
+            {orderChanged && (
+              <button
+                type="button"
+                onClick={saveOrderToRoutine}
+                className="rounded-full bg-zinc-950 px-3 py-1.5 text-[11px] font-extrabold text-white dark:bg-white dark:text-zinc-950"
+              >
+                {orderSavedNotice ? '¡Guardado!' : 'Guardar en rutina'}
+              </button>
+            )}
+          </div>
+
+          <ul className="space-y-1.5">
+            {sessionExercises.map((e, i) => {
+              const count = sets.filter((s) => s.ex === e.name).length;
+              const goalSets = Number(e.targetSets) || 0;
+              return (
+                <li key={`${e.name}-${i}`} className="flex items-center justify-between gap-2 rounded-2xl bg-zinc-200/70 px-3 py-2 dark:bg-zinc-800/70">
+                  <button
+                    type="button"
+                    onClick={() => { setName(e.name); setOrganizing(false); }}
+                    className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                  >
+                    <span className="flex size-6 shrink-0 items-center justify-center rounded-lg bg-zinc-950 text-[11px] font-extrabold text-white dark:bg-white dark:text-zinc-950">
+                      {String(i + 1).padStart(2, '0')}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="truncate text-xs font-bold">{e.name}</p>
+                      <p className={`text-[10px] ${muted}`}>
+                        {e.muscle}{goalSets > 0 ? ` · ${count}/${goalSets} ser.` : count > 0 ? ` · ${count} ser.` : ''}
+                      </p>
+                    </div>
+                  </button>
+
+                  <div className="flex shrink-0 items-center gap-0.5">
+                    <button
+                      type="button"
+                      onClick={() => moveSessionExercise(i, i - 1)}
+                      disabled={i === 0}
+                      aria-label={`Subir ${e.name}`}
+                      className="flex size-7 items-center justify-center rounded-full hover:bg-zinc-300 disabled:opacity-25 dark:hover:bg-zinc-700"
+                    >
+                      <ArrowUp size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => moveSessionExercise(i, i + 1)}
+                      disabled={i === sessionExercises.length - 1}
+                      aria-label={`Bajar ${e.name}`}
+                      className="flex size-7 items-center justify-center rounded-full hover:bg-zinc-300 disabled:opacity-25 dark:hover:bg-zinc-700"
+                    >
+                      <ArrowDown size={14} />
+                    </button>
+                    {count === 0 && (
+                      <button
+                        type="button"
+                        onClick={() => removeSessionExercise(i)}
+                        aria-label={`Quitar ${e.name} de hoy`}
+                        className="flex size-7 items-center justify-center rounded-full text-slate-400 hover:bg-rose-500/15 hover:text-rose-600"
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+
+          <form onSubmit={addExtraExercise} className="flex gap-1.5 border-t border-zinc-200 pt-3 dark:border-zinc-800">
+            <input
+              aria-label="Ejercicio extra"
+              placeholder="Ejercicio extra..."
+              value={extraName}
+              onChange={(e) => setExtraName(e.target.value)}
+              className={`${field} !h-10 w-full min-w-0 text-xs`}
+            />
+            <input
+              inputMode="numeric"
+              aria-label="Series"
+              placeholder="Ser."
+              value={extraSets}
+              onChange={(e) => setExtraSets(e.target.value)}
+              className={`${field} !h-10 w-14 shrink-0 px-1 text-center text-xs`}
+            />
+            <select
+              aria-label="Músculo"
+              value={extraMuscle}
+              onChange={(e) => setExtraMuscle(e.target.value)}
+              className={`${field} !h-10 shrink-0 px-2 text-xs`}
+            >
+              {MUSCLES.map((m) => <option key={m}>{m}</option>)}
+            </select>
+            <button type="submit" disabled={!extraName.trim()} aria-label="Añadir" className="flex size-10 shrink-0 items-center justify-center rounded-full bg-zinc-950 text-white disabled:opacity-40 dark:bg-white dark:text-zinc-950">
+              <Plus size={16} />
+            </button>
+          </form>
+        </Card>
+      )}
+
       {/* Carrusel de ejercicios */}
-      {exercises.length === 0 ? (
+      {sessionExercises.length === 0 ? (
         <Card className="text-center">
           <p className={`text-sm ${muted}`}>Esta rutina no tiene ejercicios.</p>
           <button type="button" onClick={() => go('inicio')} className="mt-3 rounded-full bg-zinc-950 px-4 py-2 text-xs font-bold text-white dark:bg-white dark:text-zinc-950">
@@ -1347,8 +1822,10 @@ export function Workout({ routine, go, activeDate }) {
         </Card>
       ) : (
         <div className="-mx-5 flex snap-x snap-mandatory gap-2.5 overflow-x-auto px-5 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {exercises.map((e) => {
+          {sessionExercises.map((e, idx) => {
             const n = sets.filter((x) => x.ex === e.name).length;
+            const goalSets = Number(e.targetSets) || 0;
+            const completedGoal = goalSets > 0 ? n >= goalSets : n > 0;
             const on = e.name === name;
             return (
               <button
@@ -1364,9 +1841,9 @@ export function Workout({ routine, go, activeDate }) {
               >
                 <div className="flex items-center justify-between gap-1">
                   <span className={`truncate text-[10px] font-bold uppercase tracking-wider ${on ? 'opacity-70' : muted}`}>
-                    {e.muscle}
+                    {String(idx + 1).padStart(2, '0')} · {e.muscle}
                   </span>
-                  {n > 0 && (
+                  {completedGoal && (
                     <span className={`flex size-4 shrink-0 items-center justify-center rounded-full ${on ? 'bg-white text-zinc-950 dark:bg-zinc-950 dark:text-white' : 'bg-zinc-950 text-white dark:bg-white dark:text-zinc-950'}`}>
                       <Check size={10} strokeWidth={3} />
                     </span>
@@ -1377,12 +1854,12 @@ export function Workout({ routine, go, activeDate }) {
 
                 <div className="mt-2.5 flex items-center justify-between">
                   <span className={`text-xs font-semibold ${on ? 'opacity-75' : muted}`}>
-                    {n} {n === 1 ? 'serie' : 'series'}
+                    {goalSets > 0 ? `${n}/${goalSets} series` : `${n} ${n === 1 ? 'serie' : 'series'}`}
                   </span>
                   <div className="flex items-end gap-0.5 opacity-50" aria-hidden="true">
-                    {[3, 6, 3].map((h, idx) => (
+                    {[3, 6, 3].map((h, i) => (
                       <span
-                        key={idx}
+                        key={i}
                         className={`w-0.5 rounded-full ${on ? 'bg-white dark:bg-zinc-950' : 'bg-zinc-400 dark:bg-zinc-600'}`}
                         style={{ height: `${h * 1.5}px` }}
                       />
@@ -1432,10 +1909,10 @@ export function Workout({ routine, go, activeDate }) {
       {/* Tarjeta principal de registro con RepsPicker intacto */}
       <Card className="text-center">
         <div className="flex flex-wrap items-center justify-center gap-2">
-          {currentEx?.targetReps && (
+          {targetMeta && (
             <span className="inline-flex items-center gap-1 rounded-full bg-zinc-200/80 px-3 py-1 text-xs font-semibold dark:bg-zinc-800">
               <Target size={12} className={muted} />
-              Objetivo: <b>{currentEx.targetReps}</b>{hasBase ? ` · ${currentEx.defaultWeight} kg` : ''}
+              Objetivo: <b>{targetMeta}</b>
             </span>
           )}
           {last && (
@@ -1494,7 +1971,7 @@ export function Workout({ routine, go, activeDate }) {
 
           <button type="submit" disabled={!name} className={`${primary} flex !h-12 items-center justify-center gap-2 !text-sm`}>
             <Plus size={17} strokeWidth={2.5} />
-            Registrar serie {mine.length + 1}
+            Registrar serie {mine.length + 1}{Number(currentEx?.targetSets) > 0 ? ` de ${currentEx.targetSets}` : ''}
           </button>
 
           {preview1rm > 0 && (
@@ -1512,50 +1989,110 @@ export function Workout({ routine, go, activeDate }) {
         </form>
       </Card>
 
-      {/* Series registradas del ejercicio actual */}
-      {mine.length > 0 && (
+      {/* Series registradas del ejercicio actual + botón rápido para añadir serie */}
+      {name && (
         <section>
-          <div className="flex items-center justify-between">
-            <h2 className="text-xl font-bold tracking-tight">Series · {name}</h2>
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-xl font-bold tracking-tight">
+              Series · {name}
+              {Number(currentEx?.targetSets) > 0 && (
+                <span className={`ml-2 text-sm font-semibold ${muted}`}>
+                  ({mine.length}/{currentEx.targetSets})
+                </span>
+              )}
+            </h2>
             <button
               type="button"
-              onClick={() => push(mine.at(-1).kg, mine.at(-1).reps)}
-              className="inline-flex items-center gap-1.5 rounded-full bg-zinc-100 px-3.5 py-1.5 text-xs font-bold transition-colors hover:bg-zinc-200 dark:bg-zinc-900 dark:hover:bg-zinc-800"
+              onClick={addQuickSet}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-zinc-100 px-3.5 py-1.5 text-xs font-bold transition-colors hover:bg-zinc-200 dark:bg-zinc-900 dark:hover:bg-zinc-800"
             >
-              <Repeat size={13} /> Repetir última
+              {mine.length > 0 ? <><Repeat size={13} /> Repetir última</> : <><Plus size={13} /> Añadir serie</>}
             </button>
           </div>
 
-          <ol className="mt-3 space-y-2">
-            {mine.map((x, i) => (
-              <li key={x.idx} className="flex items-center justify-between gap-3 rounded-[22px] bg-zinc-100 p-3 pl-3.5 dark:bg-zinc-900">
-                <div className="flex items-center gap-3">
-                  <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-zinc-950 text-xs font-extrabold text-white dark:bg-white dark:text-zinc-950">
-                    {String(i + 1).padStart(2, '0')}
-                  </span>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-extrabold">
-                        {fmt(x.kg, 1)} kg <span className={`font-semibold ${muted}`}>×</span> {x.reps} reps
-                      </p>
-                      {x.pr && (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-extrabold text-amber-600 dark:text-amber-400">
-                          <Trophy size={10} /> Récord
+          {mine.length > 0 && (
+            <ol className="mt-3 space-y-2">
+              {mine.map((x, i) => {
+                const isEditingThisSet = editingSetIdx === x.idx;
+                return (
+                  <li key={x.idx} className="rounded-[22px] bg-zinc-100 p-3 pl-3.5 dark:bg-zinc-900">
+                    <div className="flex items-center justify-between gap-3">
+                      <button
+                        type="button"
+                        onClick={() => startEditSet(x)}
+                        className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                      >
+                        <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-zinc-950 text-xs font-extrabold text-white dark:bg-white dark:text-zinc-950">
+                          {String(i + 1).padStart(2, '0')}
                         </span>
-                      )}
-                    </div>
-                    <p className={`text-[11px] ${muted}`}>
-                      Volumen: {fmt(x.kg * x.reps)} kg · 1RM {fmt(e1rm(x.kg, x.reps), 1)} kg
-                    </p>
-                  </div>
-                </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-extrabold">
+                              {fmt(x.kg, 1)} kg <span className={`font-semibold ${muted}`}>×</span> {x.reps} reps
+                            </p>
+                            {x.pr && (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-extrabold text-amber-600 dark:text-amber-400">
+                                <Trophy size={10} /> Récord
+                              </span>
+                            )}
+                          </div>
+                          <p className={`text-[11px] ${muted}`}>
+                            Volumen: {fmt(x.kg * x.reps)} kg · 1RM {fmt(e1rm(x.kg, x.reps), 1)} kg
+                          </p>
+                        </div>
+                      </button>
 
-                <button type="button" onClick={() => commit(sets.filter((_, j) => j !== x.idx))} aria-label={`Quitar serie ${i + 1}`} className={trash}>
-                  <X size={15} />
-                </button>
-              </li>
-            ))}
-          </ol>
+                      <div className="flex shrink-0 items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => startEditSet(x)}
+                          aria-label={`Editar serie ${i + 1}`}
+                          className={`flex size-8 items-center justify-center rounded-full transition-colors ${isEditingThisSet ? 'bg-zinc-950 text-white dark:bg-white dark:text-zinc-950' : 'text-slate-400 hover:bg-zinc-200 dark:hover:bg-zinc-800'}`}
+                        >
+                          <Pencil size={13} />
+                        </button>
+                        <button type="button" onClick={() => commit(sets.filter((_, j) => j !== x.idx))} aria-label={`Quitar serie ${i + 1}`} className={trash}>
+                          <X size={15} />
+                        </button>
+                      </div>
+                    </div>
+
+                    {isEditingThisSet && (
+                      <div className="mt-2.5 flex items-center gap-2 border-t border-zinc-200 pt-2.5 dark:border-zinc-800">
+                        <div className="relative min-w-0 flex-1">
+                          <input
+                            inputMode="decimal"
+                            aria-label="Editar kilos"
+                            value={editSetForm.kg}
+                            onChange={(e) => setEditSetForm((v) => ({ ...v, kg: e.target.value }))}
+                            className={`${field} !h-9 w-full pr-7 text-center text-xs font-extrabold`}
+                          />
+                          <span className={`pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold ${muted}`}>kg</span>
+                        </div>
+                        <div className="relative min-w-0 flex-1">
+                          <input
+                            inputMode="numeric"
+                            aria-label="Editar repeticiones"
+                            value={editSetForm.reps}
+                            onChange={(e) => setEditSetForm((v) => ({ ...v, reps: e.target.value }))}
+                            className={`${field} !h-9 w-full pr-9 text-center text-xs font-extrabold`}
+                          />
+                          <span className={`pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold ${muted}`}>reps</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => saveEditSet(x.idx)}
+                          className="flex h-9 shrink-0 items-center gap-1 rounded-xl bg-zinc-950 px-3 text-xs font-extrabold text-white dark:bg-white dark:text-zinc-950"
+                        >
+                          <Check size={14} /> Guardar
+                        </button>
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
+            </ol>
+          )}
         </section>
       )}
     </div>
@@ -1565,15 +2102,18 @@ export function Workout({ routine, go, activeDate }) {
 const WEEK_DAYS = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
 
 export function Progress() {
-  const { sessions, goals, saveGoals, deleteSession } = useGym();
+  const { sessions, routines, goals, saveGoals, updateSession, deleteSession } = useGym();
   const [ex, setEx] = useState('');
   const [editing, setEditing] = useState(false);
+
+  // Estado para editar y añadir series en un entreno guardado del historial
+  const [editingSessionId, setEditingSessionId] = useState(null);
+  const [newSetForm, setNewSetForm] = useState({ ex: '', kg: '', reps: '' });
 
   const names = [...new Set(sessions.flatMap((s) => s.sets.map((x) => x.ex)))];
   const sel = names.includes(ex) ? ex : names[0];
   const ordered = [...sessions].sort((a, b) => a.date.localeCompare(b.date));
 
-  // Evolución del 1RM estimado del ejercicio seleccionado
   const pts = ordered
     .map((s) => ({
       date: s.date,
@@ -1593,7 +2133,6 @@ export function Progress() {
   const area = coords.length > 1 ? `12,116 ${line} ${coords.at(-1).x},116` : '';
   const gain = pts.length > 1 ? ((pts.at(-1).v - pts[0].v) / pts[0].v) * 100 : 0;
 
-  // Métricas semanales e históricas
   const counts = weekSets(sessions);
   const weekly = goals.weekly || {};
   const setCap = (m, v) => {
@@ -1611,7 +2150,6 @@ export function Progress() {
   const delta = prev ? ((week - prev) / prev) * 100 : null;
   const doneSets = Object.values(counts).reduce((t, n) => t + n, 0);
 
-  // Días entrenados de la semana actual (Lun - Dom)
   const monday = new Date();
   monday.setHours(0, 0, 0, 0);
   monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
@@ -1624,7 +2162,6 @@ export function Progress() {
     return { label, done: trainedDates.has(k), isToday: k === iso() };
   });
 
-  // Métricas clave del carrusel tipo regla
   const weekSessionsCount = sessions.filter((s) => s.date >= mondayIso).length;
   const avgIntensity = doneSets > 0 ? week / doneSets : 0;
   const totalTons = sessions.reduce((t, s) => t + s.sets.reduce((u, x) => u + x.kg * x.reps, 0), 0) / 1000;
@@ -1649,9 +2186,50 @@ export function Progress() {
     ? Object.entries(weekly)
     : Object.entries(counts).sort((a, b) => b[1] - a[1]);
 
+  const toggleEditSession = (session) => {
+    if (editingSessionId === session.id) {
+      setEditingSessionId(null);
+      return;
+    }
+    const defaultEx = session.sets[0]?.ex || routines[session.name]?.[0]?.name || '';
+    const lastSet = [...session.sets].reverse().find((s) => s.ex === defaultEx);
+    setEditingSessionId(session.id);
+    setNewSetForm({
+      ex: defaultEx,
+      kg: lastSet ? String(lastSet.kg) : '',
+      reps: lastSet ? String(lastSet.reps) : '',
+    });
+  };
+
+  const handleAddSetToHistory = (e, session) => {
+    e.preventDefault();
+    const cleanEx = newSetForm.ex.trim();
+    const kg = Number(String(newSetForm.kg).replace(',', '.'));
+    const reps = Math.floor(Number(newSetForm.reps));
+    if (!cleanEx || !(kg >= 0) || !(reps > 0) || !updateSession) return;
+    const routineEx = Object.values(routines).flat().find((item) => item.name.toLowerCase() === cleanEx.toLowerCase());
+    updateSession(session.id, (s) => ({
+      sets: [...s.sets, { ex: cleanEx, muscle: routineEx?.muscle, kg, reps }],
+    }));
+    setNewSetForm((v) => ({ ...v, kg: String(kg), reps: String(reps) }));
+  };
+
+  const handleRemoveSetFromHistory = (session, setIndex) => {
+    if (!updateSession) return;
+    if (session.sets.length <= 1) {
+      if (window.confirm('Es la última serie del entreno. ¿Eliminar el entreno completo?')) {
+        deleteSession(session.id);
+        setEditingSessionId(null);
+      }
+      return;
+    }
+    updateSession(session.id, (s) => ({
+      sets: s.sets.filter((_, idx) => idx !== setIndex),
+    }));
+  };
+
   return (
     <div className="space-y-5">
-      {/* Resumen semanal moderno */}
       <Card className="relative overflow-hidden">
         <div className="flex items-start justify-between gap-2">
           <div>
@@ -1669,7 +2247,6 @@ export function Progress() {
           )}
         </div>
 
-        {/* Tira de constancia semanal L-D */}
         <div className="mt-5 grid grid-cols-7 gap-1.5">
           {weekStrip.map((d, i) => (
             <div key={i} className="flex flex-col items-center gap-1.5">
@@ -1686,7 +2263,6 @@ export function Progress() {
           ))}
         </div>
 
-        {/* Barra de objetivo de series */}
         <div className="mt-5 border-t border-zinc-200 pt-4 dark:border-zinc-800">
           <div className="mb-2 flex items-center justify-between text-xs">
             <span className={`font-medium ${muted}`}>
@@ -1698,7 +2274,6 @@ export function Progress() {
         </div>
       </Card>
 
-      {/* Regla deslizable de métricas inspirada en el RepsPicker */}
       <section>
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-bold tracking-tight">Métricas clave</h2>
@@ -1726,7 +2301,6 @@ export function Progress() {
         </div>
       </section>
 
-      {/* Evolución por ejercicio */}
       <section>
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-bold tracking-tight">Fuerza · 1RM</h2>
@@ -1819,7 +2393,6 @@ export function Progress() {
         )}
       </section>
 
-      {/* Volumen por músculo rediseñado */}
       <section>
         <div className="flex items-center justify-between">
           <div>
@@ -1910,7 +2483,7 @@ export function Progress() {
         )}
       </section>
 
-      {/* Historial reciente rediseñado */}
+      {/* Historial reciente con edición y posibilidad de añadir series */}
       {recent.length > 0 && (
         <section>
           <div className="flex items-center justify-between">
@@ -1926,40 +2499,119 @@ export function Progress() {
               const prs = x.sets.filter((y) => y.pr).length;
               const exCount = new Set(x.sets.map((y) => y.ex)).size;
               const { day, month } = dayParts(x.date);
+              const isEditingThis = editingSessionId === x.id;
+              const sessionExerciseOptions = [...new Set([
+                ...x.sets.map((s) => s.ex),
+                ...(routines[x.name] || []).map((e) => e.name),
+              ])];
 
               return (
-                <div key={x.id} className="flex items-center gap-3.5 rounded-[24px] bg-zinc-100 p-3.5 dark:bg-zinc-900">
-                  <div className="flex size-12 shrink-0 flex-col items-center justify-center rounded-2xl bg-zinc-950 text-white dark:bg-white dark:text-zinc-950">
-                    <span className="text-base font-extrabold leading-none">{day}</span>
-                    <span className="mt-0.5 text-[10px] font-bold uppercase tracking-wider opacity-75">{month}</span>
+                <div key={x.id} className="rounded-[24px] bg-zinc-100 p-3.5 dark:bg-zinc-900">
+                  <div className="flex items-center gap-3.5">
+                    <div className="flex size-12 shrink-0 flex-col items-center justify-center rounded-2xl bg-zinc-950 text-white dark:bg-white dark:text-zinc-950">
+                      <span className="text-base font-extrabold leading-none">{day}</span>
+                      <span className="mt-0.5 text-[10px] font-bold uppercase tracking-wider opacity-75">{month}</span>
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <p className="truncate font-bold">{x.name}</p>
+                        {prs > 0 && (
+                          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-extrabold text-amber-600 dark:text-amber-400">
+                            <Flame size={10} />{prs} PR
+                          </span>
+                        )}
+                      </div>
+                      <div className={`mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs ${muted}`}>
+                        <span>{exCount} {exCount === 1 ? 'ej.' : 'ejs.'}</span>
+                        <span>·</span>
+                        <span>{x.sets.length} series</span>
+                        <span>·</span>
+                        <b className="font-semibold text-zinc-700 dark:text-zinc-300">{fmt(vol)} kg</b>
+                      </div>
+                    </div>
+
+                    <div className="flex shrink-0 items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => toggleEditSession(x)}
+                        aria-label={`Editar series de ${x.name}`}
+                        aria-expanded={isEditingThis}
+                        className={`flex size-8 items-center justify-center rounded-full transition-colors ${isEditingThis ? 'bg-zinc-950 text-white dark:bg-white dark:text-zinc-950' : 'text-slate-400 hover:bg-zinc-200 dark:hover:bg-zinc-800'}`}
+                      >
+                        {isEditingThis ? <X size={15} /> : <Pencil size={15} />}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { if (window.confirm('¿Eliminar este entreno?')) deleteSession(x.id); }}
+                        aria-label={`Eliminar entreno del ${shortDate(x.date)}`}
+                        className={trash}
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
                   </div>
 
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <p className="truncate font-bold">{x.name}</p>
-                      {prs > 0 && (
-                        <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-extrabold text-amber-600 dark:text-amber-400">
-                          <Flame size={10} />{prs} PR
-                        </span>
-                      )}
-                    </div>
-                    <div className={`mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs ${muted}`}>
-                      <span>{exCount} {exCount === 1 ? 'ej.' : 'ejs.'}</span>
-                      <span>·</span>
-                      <span>{x.sets.length} series</span>
-                      <span>·</span>
-                      <b className="font-semibold text-zinc-700 dark:text-zinc-300">{fmt(vol)} kg</b>
-                    </div>
-                  </div>
+                  {/* Panel desplegable para ver, quitar o añadir series a este entreno */}
+                  {isEditingThis && (
+                    <div className="mt-3 space-y-2.5 border-t border-zinc-200 pt-3 dark:border-zinc-800">
+                      <ul className="space-y-1.5">
+                        {x.sets.map((s, sIdx) => (
+                          <li key={sIdx} className="flex items-center justify-between gap-2 rounded-xl bg-zinc-200/70 px-3 py-1.5 text-xs dark:bg-zinc-800/70">
+                            <span className="truncate font-semibold">{s.ex}</span>
+                            <span className="flex shrink-0 items-center gap-2">
+                              <span className="font-bold">{fmt(s.kg, 1)} kg × {s.reps}</span>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveSetFromHistory(x, sIdx)}
+                                aria-label="Eliminar serie"
+                                className="flex size-6 items-center justify-center rounded-full text-slate-400 hover:bg-rose-500/15 hover:text-rose-600"
+                              >
+                                <X size={13} />
+                              </button>
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
 
-                  <button
-                    type="button"
-                    onClick={() => { if (window.confirm('¿Eliminar este entreno?')) deleteSession(x.id); }}
-                    aria-label={`Eliminar entreno del ${shortDate(x.date)}`}
-                    className={trash}
-                  >
-                    <Trash2 size={15} />
-                  </button>
+                      <form onSubmit={(e) => handleAddSetToHistory(e, x)} className="flex gap-1.5">
+                        <input
+                          list={`ex-opts-${x.id}`}
+                          aria-label="Ejercicio"
+                          placeholder="Ejercicio"
+                          value={newSetForm.ex}
+                          onChange={(e) => setNewSetForm((v) => ({ ...v, ex: e.target.value }))}
+                          className={`${field} !h-9 w-full min-w-0 px-2.5 text-xs font-semibold`}
+                        />
+                        <datalist id={`ex-opts-${x.id}`}>
+                          {sessionExerciseOptions.map((opt) => <option key={opt} value={opt} />)}
+                        </datalist>
+                        <input
+                          inputMode="decimal"
+                          aria-label="Kilos"
+                          placeholder="Kg"
+                          value={newSetForm.kg}
+                          onChange={(e) => setNewSetForm((v) => ({ ...v, kg: e.target.value }))}
+                          className={`${field} !h-9 w-16 shrink-0 px-1.5 text-center text-xs font-bold`}
+                        />
+                        <input
+                          inputMode="numeric"
+                          aria-label="Repeticiones"
+                          placeholder="Reps"
+                          value={newSetForm.reps}
+                          onChange={(e) => setNewSetForm((v) => ({ ...v, reps: e.target.value }))}
+                          className={`${field} !h-9 w-16 shrink-0 px-1.5 text-center text-xs font-bold`}
+                        />
+                        <button
+                          type="submit"
+                          aria-label="Añadir serie"
+                          className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-zinc-950 text-white dark:bg-white dark:text-zinc-950"
+                        >
+                          <Plus size={15} />
+                        </button>
+                      </form>
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -2057,8 +2709,6 @@ export function Diet({ activeDate }) {
 
   return (
     <div className="space-y-4">
-
-      {/* Hero Bento de Calorías y Macros */}
       <Card>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -2086,7 +2736,6 @@ export function Diet({ activeDate }) {
           </div>
         </div>
 
-        {/* Anillo compacto + Macros con iconos */}
         <div className="mt-5 flex items-center gap-4">
           <div className="shrink-0">
             <Ring value={(tot.kcal / myGoals.kcal) * 100} size={132} stroke={13}>
@@ -2133,7 +2782,6 @@ export function Diet({ activeDate }) {
         )}
       </Card>
 
-      {/* Registro de comidas del día */}
       <section>
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-bold tracking-tight">Comidas de hoy</h2>
@@ -2189,7 +2837,6 @@ export function Diet({ activeDate }) {
         </div>
       </section>
 
-      {/* Añadir comida o gestionar recetas */}
       <Card>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">

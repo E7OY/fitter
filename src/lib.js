@@ -3,9 +3,21 @@ export const iso = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth()
 export const e1rm = (kg, reps) => kg * (1 + reps / 30);
 export const MUSCLES = ['Pecho', 'Espalda', 'Hombro', 'Piernas', 'Brazos', 'Core'];
 export const DEFAULT_ROUTINES = {
-  Empuje: [{ name: 'Press banca', muscle: 'Pecho' }, { name: 'Press militar', muscle: 'Hombro' }, { name: 'Fondos', muscle: 'Pecho' }],
-  'Tirón': [{ name: 'Dominadas', muscle: 'Espalda' }, { name: 'Remo con barra', muscle: 'Espalda' }, { name: 'Curl bíceps', muscle: 'Brazos' }],
-  Pierna: [{ name: 'Sentadilla', muscle: 'Piernas' }, { name: 'Peso muerto rumano', muscle: 'Piernas' }, { name: 'Prensa', muscle: 'Piernas' }],
+  Empuje: [
+    { name: 'Press banca', muscle: 'Pecho', targetSets: 4, targetReps: '6-8' },
+    { name: 'Press militar', muscle: 'Hombro', targetSets: 3, targetReps: '8-10' },
+    { name: 'Fondos', muscle: 'Pecho', targetSets: 3, targetReps: '10-12' },
+  ],
+  'Tirón': [
+    { name: 'Dominadas', muscle: 'Espalda', targetSets: 4, targetReps: '6-8' },
+    { name: 'Remo con barra', muscle: 'Espalda', targetSets: 4, targetReps: '8-10' },
+    { name: 'Curl bíceps', muscle: 'Brazos', targetSets: 3, targetReps: '10-12' },
+  ],
+  Pierna: [
+    { name: 'Sentadilla', muscle: 'Piernas', targetSets: 4, targetReps: '6-8' },
+    { name: 'Peso muerto rumano', muscle: 'Piernas', targetSets: 3, targetReps: '8-10' },
+    { name: 'Prensa', muscle: 'Piernas', targetSets: 3, targetReps: '10-12' },
+  ],
 };
 
 // Generación de código de amigo (sin exponer email)
@@ -75,7 +87,7 @@ const guessMuscle = (name) => {
 };
 const cap = (t) => t.charAt(0).toUpperCase() + t.slice(1);
 
-// Devuelve [{ name, exercises: [{ name, muscle, targetReps, defaultWeight, review }] }]
+// Devuelve [{ name, exercises: [{ name, muscle, targetSets, targetReps, defaultWeight, review }] }]
 export function parseRoutines(text) {
   const lines = text.split(/\r?\n/);
   const routines = [];
@@ -109,14 +121,18 @@ export function parseRoutines(text) {
     }
 
     let name = line;
-    let targetReps = '', defaultWeight = '';
-    if (sets) { targetReps = `${sets[1]}×${sets[2].replace(/\s/g, '')}`; name = name.replace(sets[0], ' '); }
+    let targetSets = '', targetReps = '', defaultWeight = '';
+    if (sets) {
+      targetSets = Number(sets[1]);
+      targetReps = sets[2].replace(/\s/g, '');
+      name = name.replace(sets[0], ' ');
+    }
     if (kg) { defaultWeight = Number(kg[1].replace(',', '.')); name = name.replace(kg[0], ' '); }
     name = name.replace(/[@()]/g, ' ').replace(/\s+/g, ' ').replace(/\s+(con|a|de)\s*$/i, '').replace(/^[\s\-–:·,.]+|[\s\-–:·,.]+$/g, '');
     if (!/[a-záéíóúñ]/i.test(name)) return;
     if (!cur) start('Rutina importada');
     const muscle = guessMuscle(name);
-    cur.exercises.push({ name: cap(name), muscle: muscle || MUSCLES[0], targetReps, defaultWeight, review: !muscle });
+    cur.exercises.push({ name: cap(name), muscle: muscle || MUSCLES[0], targetSets, targetReps, defaultWeight, review: !muscle });
   });
   return routines.filter((r) => r.exercises.length);
 }

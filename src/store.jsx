@@ -22,10 +22,10 @@ const DEFAULT_FRIENDS = [
     topLift: { ex: 'Press banca', kg: 105 },
     routineName: 'Empuje Fuerza',
     exercises: [
-      { name: 'Press banca', muscle: 'Pecho', targetReps: '4×6', defaultWeight: 90 },
-      { name: 'Press militar', muscle: 'Hombro', targetReps: '3×8', defaultWeight: 55 },
-      { name: 'Fondos lastrados', muscle: 'Pecho', targetReps: '3×10', defaultWeight: 15 },
-      { name: 'Elevaciones laterales', muscle: 'Hombro', targetReps: '4×15', defaultWeight: 12 },
+      { name: 'Press banca', muscle: 'Pecho', targetSets: 4, targetReps: '6', defaultWeight: 90 },
+      { name: 'Press militar', muscle: 'Hombro', targetSets: 3, targetReps: '8', defaultWeight: 55 },
+      { name: 'Fondos lastrados', muscle: 'Pecho', targetSets: 3, targetReps: '10', defaultWeight: 15 },
+      { name: 'Elevaciones laterales', muscle: 'Hombro', targetSets: 4, targetReps: '15', defaultWeight: 12 },
     ],
     baseReactions: { '🔥': 4, '💪': 3, '👏': 2, '⚡': 1, '🏆': 2 },
   },
@@ -42,9 +42,9 @@ const DEFAULT_FRIENDS = [
     topLift: { ex: 'Sentadilla', kg: 118 },
     routineName: 'Pierna Glúteo',
     exercises: [
-      { name: 'Sentadilla', muscle: 'Piernas', targetReps: '4×6', defaultWeight: 95 },
-      { name: 'Hip thrust', muscle: 'Piernas', targetReps: '4×10', defaultWeight: 120 },
-      { name: 'Peso muerto rumano', muscle: 'Piernas', targetReps: '3×8', defaultWeight: 85 },
+      { name: 'Sentadilla', muscle: 'Piernas', targetSets: 4, targetReps: '6', defaultWeight: 95 },
+      { name: 'Hip thrust', muscle: 'Piernas', targetSets: 4, targetReps: '10', defaultWeight: 120 },
+      { name: 'Peso muerto rumano', muscle: 'Piernas', targetSets: 3, targetReps: '8', defaultWeight: 85 },
     ],
     baseReactions: { '🔥': 6, '💪': 5, '👏': 4, '⚡': 3, '🏆': 1 },
   },
@@ -99,7 +99,6 @@ export const GymProvider = ({ user, logout, children }) => {
 
   useEffect(() => {
     localStorage.setItem(key, JSON.stringify(data));
-    // Sincronizar el código de amigo en la lista local de usuarios para que puedan encontrarte por código
     try {
       const users = JSON.parse(localStorage.getItem('gym-users')) || [];
       const idx = users.findIndex((u) => u.id === user.id);
@@ -116,6 +115,7 @@ export const GymProvider = ({ user, logout, children }) => {
     user,
     logout,
     addSession: (s) => up((d) => ({ sessions: [...d.sessions, { id: crypto.randomUUID(), ...s }], draft: null })),
+    updateSession: (id, fn) => up((d) => ({ sessions: d.sessions.map((s) => (s.id === id ? { ...s, ...fn(s) } : s)) })),
     deleteSession: (id) => up((d) => ({ sessions: d.sessions.filter((s) => s.id !== id) })),
     addMeal: (m) => up((d) => ({ meals: [...d.meals, { id: crypto.randomUUID(), ...m }] })),
     deleteMeal: (id) => up((d) => ({ meals: d.meals.filter((m) => m.id !== id) })),
