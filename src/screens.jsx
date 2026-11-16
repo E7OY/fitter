@@ -1,11 +1,14 @@
-import React, { useEffect, useState } from 'react';
-import { Check, Pencil, Plus, Trash2, Utensils, X } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Check, Pencil, Plus, Repeat, Trash2, Trophy, Utensils, X } from 'lucide-react';
 import { useGym } from './store';
 import { MUSCLES, calcStreak, e1rm, fmt, iso, weekSets, weekVol } from './lib';
 import { Bar, Card, field, muted, primary } from './ui';
 
 const good = 'text-emerald-600 dark:text-emerald-400';
 const bad = 'text-rose-600 dark:text-rose-400';
+const shortDate = (d) => new Date(`${d}T00:00`).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+const trash = 'flex size-8 shrink-0 items-center justify-center rounded-full text-slate-400 hover:bg-rose-50 hover:text-rose-700 dark:hover:bg-rose-500/10 dark:hover:text-rose-300';
+const mmss = (t) => `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`;
 
 function RoutineEditor({ routine, onSelect }) {
   const { routines, saveRoutines } = useGym();
@@ -76,9 +79,9 @@ function RoutineEditor({ routine, onSelect }) {
 }
 
 export function Home({ go, routine }) {
-  const { sessions, routines, saveRoutines, activeProfileId } = useGym();
+  const { sessions, routines, saveRoutines } = useGym();
   const [editing, setEditing] = useState(false);
-  const mySessions = sessions.filter(s => !s.profileId || s.profileId === activeProfileId);
+  const mySessions = sessions;
   const week = weekVol(mySessions, 0), prev = weekVol(mySessions, 1);
   const delta = prev ? ((week - prev) / prev) * 100 : null;
   const exercises = routines[routine];
@@ -135,59 +138,66 @@ export function Home({ go, routine }) {
 }
 
 export function Workout({ routine, go, activeDate }) {
-  const { addSession, sessions, routines, activeProfileId } = useGym();
+  const { addSession, sessions, routines, draft, saveDraft } = useGym();
   const exercises = routines[routine];
-  const mySessions = sessions.filter(s => !s.profileId || s.profileId === activeProfileId);
   const [name, setName] = useState(exercises[0]?.name || '');
-  const [sets, setSets] = useState([]);
-  const [draft, setDraft] = useState({ kg: '', reps: '' });
-  
-  // Estados del temporizador
+  const [sets, setSets] = useState(() => (draft?.routine === routine && draft.date === activeDate ? draft.sets : []));
+  const [input, setInput] = useState({ kg: '', reps: '' });
   const [rest, setRest] = useState(0);
-  const [targetRest, setTargetRest] = useState(90); // Para calcular el % de la barra
-  
+  const [targetRest, setTargetRest] = useState(90);
+  const wasResting = useRef(false);
+
   const currentEx = exercises.find((e) => e.name === name);
+  const hasBase = currentEx?.defaultWeight !== '' && currentEx?.defaultWeight !== undefined;
+  const last = [...sessions].reverse().flatMap((x) => [...x.sets].reverse()).find((x) => x.ex === name);
+  const bestBefore = Math.max(0, ...sessions.flatMap((x) => x.sets).filter((x) => x.ex === name).map((x) => e1rm(x.kg, x.reps)));
+  const mine = sets.map((x, idx) => ({ ...x, idx })).filter((x) => x.ex === name);
 
+  // Descanso: cuenta atrás y vibración al terminar.
   useEffect(() => {
-    if (rest <= 0) return undefined;
-    const t = setTimeout(() => setRest((r) => r - 1), 1000);
-    return () => clearTimeout(t);
+    if (rest > 0) {
+      wasResting.current = true;
+      const t = setTimeout(() => setRest((r) => r - 1), 1000);
+      return () => clearTimeout(t);
+    }
+    if (wasResting.current) { wasResting.current = false; navigator.vibrate?.([200, 100, 200]); }
+    return undefined;
   }, [rest]);
-  
-  const last = [...mySessions].reverse().flatMap((s) => s.sets).find((s) => s.ex === name);
-  const mine = sets.filter((s) => s.ex === name);
-  
-  const add = (event) => {
-    event.preventDefault();
-    const inputKg = draft.kg.trim();
-    const resolvedKg = (inputKg === '' && currentEx?.defaultWeight !== '' && currentEx?.defaultWeight !== undefined) 
-      ? currentEx.defaultWeight 
-      : Number(inputKg.replace(',', '.'));
 
-    const kg = Number(resolvedKg);
-    const reps = Number(draft.reps);
+  // El entreno a medias se guarda: si recargas la página no pierdes las series.
+  const commit = (next) => {
+    setSets(next);
+    saveDraft(next.length ? { routine, date: activeDate, sets: next } : null);
+  };
+
+  const push = (kg, reps) => {
     if (!name || !(kg >= 0) || !(reps > 0)) return;
-    
-    setSets((s) => [...s, { ex: name, muscle: currentEx?.muscle, kg, reps }]);
-    setDraft({ kg: draft.kg, reps: '' });
-    
-    // Reiniciamos el temporizador a 90s
+    const prior = Math.max(bestBefore, ...sets.filter((x) => x.ex === name).map((x) => e1rm(x.kg, x.reps)));
+    const pr = bestBefore > 0 && e1rm(kg, reps) > prior;
+    commit([...sets, { ex: name, muscle: currentEx?.muscle, kg, reps, ...(pr && { pr: true }) }]);
     setRest(90);
     setTargetRest(90);
   };
-  
-  // Función para ajustar el tiempo con los botones
+
+  const add = (event) => {
+    event.preventDefault();
+    const typed = input.kg.trim();
+    const kg = typed !== '' ? Number(typed.replace(',', '.')) : hasBase ? Number(currentEx.defaultWeight) : last?.kg;
+    push(kg, Number(input.reps));
+    setInput((v) => ({ ...v, reps: '' }));
+  };
+
   const adjustRest = (amount) => {
     setRest((r) => Math.max(0, r + amount));
-    setTargetRest((t) => Math.max(15, t + amount)); // Evita que el objetivo sea menor a 15s
+    setTargetRest((t) => Math.max(15, t + amount));
   };
-  
+
   const finish = () => {
     addSession({ date: activeDate || iso(), name: routine, sets });
     setSets([]);
     go('progreso');
   };
-  
+
   return (
     <div className="space-y-3">
       <Card>
@@ -195,50 +205,50 @@ export function Workout({ routine, go, activeDate }) {
         <select id="ex" value={name} onChange={(e) => setName(e.target.value)} className={`${field} mt-2 w-full`}>
           {exercises.map((e) => <option key={e.name}>{e.name}</option>)}
         </select>
-        
         {exercises.length === 0 && <p className={`mt-2 text-sm ${muted}`}>Esta rutina no tiene ejercicios. Añádelos desde Inicio con el lápiz.</p>}
         {currentEx?.targetReps && (
           <p className="mt-2 text-sm font-semibold text-emerald-600 dark:text-emerald-400">
-            Objetivo: {currentEx.targetReps} reps {currentEx?.defaultWeight !== '' && currentEx?.defaultWeight !== undefined ? `(@ ${currentEx.defaultWeight} kg)` : ''}
+            Objetivo: {currentEx.targetReps} reps {hasBase ? `(@ ${currentEx.defaultWeight} kg)` : ''}
           </p>
         )}
         {last && <p className={`mt-1 text-sm ${muted}`}>Última vez: {fmt(last.kg, 1)} kg × {last.reps}</p>}
-        
+
         <ol className="mt-4 space-y-2">
-          {mine.map((s, i) => (
-            <li key={i} className="flex justify-between rounded-2xl bg-emerald-50 px-4 py-3 text-sm dark:bg-emerald-500/10"><b>Serie {i + 1}</b><span>{fmt(s.kg, 1)} kg × {s.reps}</span></li>
+          {mine.map((x, i) => (
+            <li key={x.idx} className="flex items-center justify-between rounded-2xl bg-emerald-50 py-2 pl-4 pr-2 text-sm dark:bg-emerald-500/10">
+              <b>Serie {i + 1}</b>
+              <span className="flex items-center gap-2">
+                {x.pr && <span className="inline-flex items-center gap-1 text-xs font-bold text-amber-600 dark:text-amber-400"><Trophy size={14} />Récord</span>}
+                {fmt(x.kg, 1)} kg × {x.reps}
+                <button type="button" onClick={() => commit(sets.filter((_, j) => j !== x.idx))} aria-label={`Quitar serie ${i + 1}`} className={trash}><X size={15} /></button>
+              </span>
+            </li>
           ))}
         </ol>
-        
+
         <form onSubmit={add} className="mt-4 flex gap-2">
-          <input inputMode="decimal" aria-label="Kilos" placeholder="Kg" value={draft.kg} onChange={(e) => setDraft((d) => ({ ...d, kg: e.target.value }))} className={`${field} w-full`} />
-          <input inputMode="numeric" aria-label="Repeticiones" placeholder="Reps" value={draft.reps} onChange={(e) => setDraft((d) => ({ ...d, reps: e.target.value }))} className={`${field} w-full`} />
+          <input inputMode="decimal" aria-label="Kilos" placeholder={last ? fmt(last.kg, 1) : 'Kg'} value={input.kg} onChange={(e) => setInput((v) => ({ ...v, kg: e.target.value }))} className={`${field} w-full`} />
+          <input inputMode="numeric" aria-label="Repeticiones" placeholder={last ? String(last.reps) : 'Reps'} value={input.reps} onChange={(e) => setInput((v) => ({ ...v, reps: e.target.value }))} className={`${field} w-full`} />
           <button type="submit" aria-label="Añadir serie" className="flex size-11 shrink-0 items-center justify-center rounded-full bg-emerald-700 text-white"><Check size={18} /></button>
         </form>
+        {mine.length > 0 && (
+          <button type="button" onClick={() => push(mine.at(-1).kg, mine.at(-1).reps)} className="mt-3 inline-flex items-center gap-1.5 text-sm font-semibold text-emerald-700 dark:text-emerald-400"><Repeat size={15} />Repetir última serie</button>
+        )}
       </Card>
-      
+
       {rest > 0 && (
         <Card>
           <div className="flex items-center justify-between">
             <span className={`text-sm font-medium ${muted}`}>Descanso</span>
-            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold dark:bg-zinc-800">
-              Objetivo {String(Math.floor(targetRest / 60)).padStart(2, '0')}:{String(targetRest % 60).padStart(2, '0')}
-            </span>
+            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold dark:bg-zinc-800">Objetivo {mmss(targetRest)}</span>
           </div>
-          
-          <p className="my-3 text-4xl font-extrabold tracking-tight">
-            {String(Math.floor(rest / 60)).padStart(2, '0')}:{String(rest % 60).padStart(2, '0')}
-          </p>
-          
+          <p className="my-3 text-4xl font-extrabold tracking-tight">{mmss(rest)}</p>
           <Bar value={(rest / targetRest) * 100} />
-          
           <div className="mt-4 flex gap-2">
-            <button type="button" onClick={() => adjustRest(-15)} className="flex h-10 flex-1 items-center justify-center rounded-full bg-slate-100 text-sm font-semibold transition-colors hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700">
-              −15 s
-            </button>
-            <button type="button" onClick={() => adjustRest(15)} className="flex h-10 flex-1 items-center justify-center rounded-full bg-slate-100 text-sm font-semibold transition-colors hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700">
-              +15 s
-            </button>
+            {[-15, 15].map((n) => (
+              <button key={n} type="button" onClick={() => adjustRest(n)} className="flex h-10 flex-1 items-center justify-center rounded-full bg-slate-100 text-sm font-semibold transition-colors hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700">{n < 0 ? '−' : '+'}15 s</button>
+            ))}
+            <button type="button" onClick={() => setRest(0)} className="flex h-10 flex-1 items-center justify-center rounded-full bg-slate-100 text-sm font-semibold transition-colors hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700">Saltar</button>
           </div>
         </Card>
       )}
@@ -248,21 +258,28 @@ export function Workout({ routine, go, activeDate }) {
 }
 
 export function Progress() {
-  const { sessions, goals, activeProfileId } = useGym();
-  const mySessions = sessions.filter(s => !s.profileId || s.profileId === activeProfileId);
-  const myGoals = goals[activeProfileId] || Object.values(goals)[0];
-  
-  const names = [...new Set(mySessions.flatMap((s) => s.sets.map((x) => x.ex)))];
+  const { sessions, goals, saveGoals, deleteSession } = useGym();
   const [ex, setEx] = useState('');
-  const sel = ex || names[0];
-  const pts = mySessions
-    .map((s) => ({ v: Math.max(0, ...s.sets.filter((x) => x.ex === sel).map((x) => e1rm(x.kg, x.reps))) }))
+  const [editing, setEditing] = useState(false);
+  const names = [...new Set(sessions.flatMap((s) => s.sets.map((x) => x.ex)))];
+  const sel = names.includes(ex) ? ex : names[0];
+  const ordered = [...sessions].sort((a, b) => a.date.localeCompare(b.date));
+  const pts = ordered
+    .map((s) => ({ date: s.date, v: Math.max(0, ...s.sets.filter((x) => x.ex === sel).map((x) => e1rm(x.kg, x.reps))) }))
     .filter((p) => p.v > 0);
   const hi = Math.max(...pts.map((p) => p.v)), lo = Math.min(...pts.map((p) => p.v));
   const line = pts.map((p, i) => `${pts.length > 1 ? 6 + i * (298 / (pts.length - 1)) : 155},${110 - ((p.v - lo) / (hi - lo || 1)) * 90}`).join(' ');
   const gain = pts.length > 1 ? ((pts.at(-1).v - pts[0].v) / pts[0].v) * 100 : 0;
-  const counts = weekSets(mySessions);
-  
+  const counts = weekSets(sessions);
+  const weekly = goals.weekly || {};
+  const setCap = (m, v) => {
+    const n = Math.max(0, Math.floor(Number(v) || 0));
+    const next = { ...weekly };
+    if (n) next[m] = n; else delete next[m];
+    saveGoals({ weekly: next });
+  };
+  const recent = [...ordered].reverse().slice(0, 8);
+
   return (
     <div className="space-y-3">
       <Card>
@@ -277,13 +294,30 @@ export function Progress() {
             <svg viewBox="0 0 310 120" className="mt-3 w-full" role="img" aria-label={`Evolución del 1RM estimado de ${sel}`}>
               <polyline points={line} fill="none" stroke="#10b981" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
+            <div className={`flex justify-between text-xs ${muted}`}><span>{shortDate(pts[0].date)}</span><span>{shortDate(pts.at(-1).date)}</span></div>
           </>
         )}
       </Card>
+
       <Card>
-        <p className="font-bold">Series por músculo</p>
-        <p className={`text-sm ${muted}`}>Esta semana · tope de series</p>
-        {Object.entries(myGoals.weekly).map(([m, cap]) => {
+        <div className="flex items-start justify-between">
+          <div>
+            <p className="font-bold">Series por músculo</p>
+            <p className={`text-sm ${muted}`}>Esta semana · tope de series</p>
+          </div>
+          <button type="button" onClick={() => setEditing((v) => !v)} aria-label="Editar topes" aria-pressed={editing} className="flex size-8 items-center justify-center rounded-full hover:bg-slate-100 dark:hover:bg-zinc-800">{editing ? <X size={16} /> : <Pencil size={16} />}</button>
+        </div>
+        {editing ? (
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            {MUSCLES.map((m) => (
+              <label key={m} className={`text-xs font-medium ${muted}`}>{m} (0 = sin tope)
+                <input inputMode="numeric" value={weekly[m] ?? ''} onChange={(e) => setCap(m, e.target.value)} className={`${field} mt-1 w-full`} />
+              </label>
+            ))}
+          </div>
+        ) : Object.keys(weekly).length === 0 ? (
+          <p className={`mt-3 text-sm ${muted}`}>No hay topes. Pulsa el lápiz para fijar uno por músculo.</p>
+        ) : Object.entries(weekly).map(([m, cap]) => {
           const n = counts[m] || 0, pct = (n / cap) * 100;
           return (
             <div key={m} className="mt-4">
@@ -293,6 +327,24 @@ export function Progress() {
           );
         })}
       </Card>
+
+      {recent.length > 0 && (
+        <Card className="!py-2">
+          <p className="py-3 font-bold">Historial</p>
+          {recent.map((x) => {
+            const vol = x.sets.reduce((t, y) => t + y.kg * y.reps, 0), prs = x.sets.filter((y) => y.pr).length;
+            return (
+              <div key={x.id} className="flex items-center justify-between gap-3 border-b border-slate-100 py-3 last:border-0 dark:border-zinc-800">
+                <div className="min-w-0">
+                  <p className="font-bold">{x.name}</p>
+                  <p className={`text-sm ${muted}`}>{shortDate(x.date)} · {x.sets.length} series · {fmt(vol)} kg{prs > 0 ? ` · ${prs} ${prs === 1 ? 'récord' : 'récords'}` : ''}</p>
+                </div>
+                <button type="button" onClick={() => { if (window.confirm('¿Eliminar este entreno?')) deleteSession(x.id); }} aria-label={`Eliminar entreno del ${shortDate(x.date)}`} className={trash}><Trash2 size={15} /></button>
+              </div>
+            );
+          })}
+        </Card>
+      )}
     </div>
   );
 }
@@ -302,27 +354,29 @@ const blank = { type: 'Desayuno', name: '', kcal: '', p: '', c: '', g: '' };
 const blankRecipe = { ...blank, desc: '' };
 
 export function Diet({ activeDate }) {
-  const { meals, goals, recipes = [], addMeal, deleteMeal, saveGoals, saveRecipes, activeProfileId, profiles, cravings = {}, saveCraving } = useGym();
+  const { meals, goals, recipes = [], addMeal, deleteMeal, saveGoals, saveRecipes, cravings = {}, saveCraving } = useGym();
   const [f, setF] = useState(blank);
   const [editing, setEditing] = useState(false);
-  const myGoals = goals[activeProfileId] || Object.values(goals)[0];
+  const myGoals = goals;
   const [g, setG] = useState(myGoals);
   
-  useEffect(() => setG(myGoals), [activeProfileId, goals]);
+  useEffect(() => setG(myGoals), [goals]);
 
   const [editingRecipes, setEditingRecipes] = useState(false);
   const [recipeForm, setRecipeForm] = useState({ id: '', ...blankRecipe });
   
   const currentDate = activeDate || iso();
   const [craving, setCraving] = useState('');
-  useEffect(() => setCraving(cravings[activeProfileId]?.[currentDate] || ''), [activeProfileId, currentDate, cravings]);
-  const others = profiles.filter((p) => p.id !== activeProfileId && cravings[p.id]?.[currentDate]);
-  const myName = profiles.find((p) => p.id === activeProfileId)?.name;
+  useEffect(() => setCraving(cravings[currentDate] || ''), [currentDate, cravings]);
   const submitCraving = (event) => {
     event.preventDefault();
     saveCraving(currentDate, craving);
   };
-  const list = meals.filter((m) => (!m.profileId || m.profileId === activeProfileId) && m.date === currentDate);
+  const list = meals.filter((m) => m.date === currentDate);
+  const prevDay = new Date(`${currentDate}T00:00`);
+  prevDay.setDate(prevDay.getDate() - 1);
+  const yesterday = meals.filter((m) => m.date === iso(prevDay));
+  const copyYesterday = () => yesterday.forEach(({ type, name, kcal, p, c, g }) => addMeal({ date: currentDate, type, name, kcal, p, c, g }));
   const tot = list.reduce((t, m) => ({ kcal: t.kcal + m.kcal, p: t.p + m.p, c: t.c + m.c, g: t.g + m.g }), { kcal: 0, p: 0, c: 0, g: 0 });
   const set = (k) => (e) => setF((v) => ({ ...v, [k]: e.target.value }));
   const setR = (k) => (e) => setRecipeForm((v) => ({ ...v, [k]: e.target.value }));
@@ -368,18 +422,11 @@ export function Diet({ activeDate }) {
   return (
     <div className="space-y-3">
       <Card>
-        <p className={`text-sm font-medium ${muted}`}>Lo que me apetece comer{myName ? ` · ${myName}` : ''}</p>
+        <p className={`text-sm font-medium ${muted}`}>Lo que me apetece comer</p>
         <form onSubmit={submitCraving} className="mt-3 flex gap-2">
           <input aria-label="Qué te apetece comer" placeholder="Ej. pollo con arroz" value={craving} maxLength={80} onChange={(e) => setCraving(e.target.value)} className={`${field} w-full min-w-0`} />
           <button type="submit" aria-label="Guardar lo que me apetece" className="flex size-11 shrink-0 items-center justify-center rounded-full bg-emerald-700 text-white"><Check size={18} /></button>
         </form>
-        {others.length > 0 && (
-          <ul className="mt-4 space-y-2">
-            {others.map((p) => (
-              <li key={p.id} className="rounded-2xl bg-emerald-50 px-4 py-3 text-sm dark:bg-emerald-500/10">A <b>{p.name}</b> le apetece {cravings[p.id][currentDate]}</li>
-            ))}
-          </ul>
-        )}
       </Card>
       <Card>
         <div className={`flex items-center justify-between text-sm font-medium ${muted}`}><span>Calorías del día</span><span className="flex items-center gap-1"><button type="button" onClick={() => { setG(myGoals); setEditing((v) => !v); }} aria-label="Editar objetivo" aria-pressed={editing} className="flex size-8 items-center justify-center rounded-full hover:bg-slate-100 dark:hover:bg-zinc-800">{editing ? <X size={16} /> : <Pencil size={16} />}</button><Utensils size={18} /></span></div>
@@ -407,7 +454,12 @@ export function Diet({ activeDate }) {
       </Card>
       
       <Card className="!py-2">
-        {list.length === 0 && <p className={`py-3 text-sm ${muted}`}>Todavía no has añadido comidas en este día.</p>}
+        {list.length === 0 && (
+          <div className="py-3 text-sm">
+            <p className={muted}>Todavía no has añadido comidas en este día.</p>
+            {yesterday.length > 0 && <button type="button" onClick={copyYesterday} className="mt-2 font-semibold text-emerald-700 dark:text-emerald-400">Copiar las {yesterday.length} comidas del día anterior</button>}
+          </div>
+        )}
         {list.map((m) => (
           <div key={m.id} className="flex items-center justify-between gap-3 border-b border-slate-100 py-3 last:border-0 dark:border-zinc-800">
             <div className="min-w-0"><p className="font-bold">{m.type}</p><p className={`truncate text-sm ${muted}`}>{m.name}</p></div>
@@ -421,7 +473,7 @@ export function Diet({ activeDate }) {
 
       <Card>
         <div className="flex items-center justify-between font-bold">
-          <p>{editingRecipes ? 'Gestionar recetas (Global)' : 'Añadir comida'}</p>
+          <p>{editingRecipes ? 'Gestionar recetas' : 'Añadir comida'}</p>
           <button type="button" onClick={() => { setEditingRecipes(!editingRecipes); setRecipeForm({ id: '', ...blankRecipe }); }} aria-label="Gestionar recetas" className="flex size-8 items-center justify-center rounded-full hover:bg-slate-100 dark:hover:bg-zinc-800">
             {editingRecipes ? <X size={16} /> : <Pencil size={16} />}
           </button>
@@ -430,7 +482,7 @@ export function Diet({ activeDate }) {
         {editingRecipes ? (
           <div className="mt-4 space-y-4">
             <form onSubmit={submitRecipe} className="space-y-3 rounded-2xl bg-slate-50 p-3 dark:bg-zinc-800/50">
-              <p className="text-sm font-semibold">{recipeForm.id ? 'Editando sugerencia' : 'Nueva sugerencia compartida'}</p>
+              <p className="text-sm font-semibold">{recipeForm.id ? 'Editando sugerencia' : 'Nueva receta'}</p>
               <div className="flex gap-2">
                 <select aria-label="Tipo" value={recipeForm.type} onChange={setR('type')} className={`${field} shrink-0`}>{['Desayuno', 'Comida', 'Merienda', 'Cena'].map((t) => <option key={t}>{t}</option>)}</select>
                 <input aria-label="Nombre" placeholder="Nombre" value={recipeForm.name} onChange={setR('name')} className={`${field} w-full min-w-0 bg-white dark:bg-zinc-900`} />
@@ -467,7 +519,7 @@ export function Diet({ activeDate }) {
         ) : (
           <>
             <div className="mt-3">
-              <p className={`mb-2 text-xs font-medium ${muted}`}>Sugerencias compartidas</p>
+              <p className={`mb-2 text-xs font-medium ${muted}`}>Sugerencias</p>
               {recipes.length > 0 ? (
                 <div className="flex snap-x gap-2 overflow-x-auto pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                   {recipes.map((r) => (

@@ -7,62 +7,78 @@ const DEFAULT_RECIPES = [
   { id: 'r3', name: 'Yogur proteico y nueces', desc: 'Yogur natural con un puñado de nueces', type: 'Merienda', kcal: 250, p: 20, c: 10, g: 14 },
   { id: 'r4', name: 'Salmón a la plancha', desc: 'Con guarnición de espárragos', type: 'Cena', kcal: 400, p: 35, c: 0, g: 25 },
 ];
-
 const defaultGoals = { kcal: 2400, p: 160, c: 260, g: 70, weekly: { Pecho: 16, Espalda: 16, Piernas: 14, Hombro: 12, Brazos: 10 } };
+const blank = () => ({ routines: DEFAULT_ROUTINES, sessions: [], meals: [], recipes: DEFAULT_RECIPES, goals: defaultGoals, cravings: {}, draft: null });
 
-const Ctx = createContext(null);
-const initial = {
-  profiles: [{ id: 'p1', name: 'Mi Perfil' }],
-  activeProfileId: 'p1',
-  routines: DEFAULT_ROUTINES,
-  sessions: [], 
-  meals: [],    
-  recipes: DEFAULT_RECIPES, 
-  goals: { p1: defaultGoals },
-  cravings: {},
+// Datos de la versión con perfiles: se pasan una sola vez a la primera cuenta que se cree.
+const migrateLegacy = () => {
+  try {
+    const old = JSON.parse(localStorage.getItem('gym-data'));
+    if (!old || localStorage.getItem('gym-legacy-done')) return null;
+    localStorage.setItem('gym-legacy-done', '1');
+    const pid = old.activeProfileId || 'p1';
+    const mine = (x) => !x.profileId || x.profileId === pid;
+    const goals = old.goals?.[pid] || old.goals?.p1 || old.goals || {};
+    return {
+      ...blank(),
+      routines: old.routines || DEFAULT_ROUTINES,
+      recipes: old.recipes || DEFAULT_RECIPES,
+      sessions: (old.sessions || []).filter(mine),
+      meals: (old.meals || []).filter(mine),
+      goals: { ...defaultGoals, ...goals },
+      cravings: old.cravings?.[pid] || {},
+    };
+  } catch { return null; }
 };
 
-export const GymProvider = ({ children }) => {
+const Ctx = createContext(null);
+
+export const GymProvider = ({ user, logout, children }) => {
+  const key = `gym-data:${user.id}`;
   const [data, setData] = useState(() => {
-    try { 
-      const local = JSON.parse(localStorage.getItem('gym-data'));
-      if (local) {
-        if (!local.profiles) local.profiles = initial.profiles;
-        if (!local.activeProfileId) local.activeProfileId = initial.activeProfileId;
-        if (local.goals && !local.goals.p1) local.goals = { p1: local.goals };
-        if (!local.recipes) local.recipes = initial.recipes;
-        return { ...initial, ...local };
-      }
-      return initial; 
-    } catch { return initial; }
+    try {
+      const saved = JSON.parse(localStorage.getItem(key));
+      if (saved) return { ...blank(), ...saved };
+    } catch { /* datos corruptos: se empieza de cero */ }
+    return migrateLegacy() || blank();
   });
-  
-  useEffect(() => localStorage.setItem('gym-data', JSON.stringify(data)), [data]);
-  
+
+  useEffect(() => { localStorage.setItem(key, JSON.stringify(data)); }, [key, data]);
+
+  const up = (fn) => setData((d) => ({ ...d, ...fn(d) }));
   const api = {
     ...data,
-    setActiveProfile: (id) => setData((d) => ({ ...d, activeProfileId: id })),
-    addProfile: (name) => setData((d) => {
-      const newId = crypto.randomUUID();
-      return { 
-        ...d, 
-        profiles: [...d.profiles, { id: newId, name }], 
-        goals: { ...d.goals, [newId]: defaultGoals },
-        activeProfileId: newId 
-      };
+    user,
+    logout,
+    addSession: (s) => up((d) => ({ sessions: [...d.sessions, { id: crypto.randomUUID(), ...s }], draft: null })),
+    deleteSession: (id) => up((d) => ({ sessions: d.sessions.filter((s) => s.id !== id) })),
+    addMeal: (m) => up((d) => ({ meals: [...d.meals, { id: crypto.randomUUID(), ...m }] })),
+    deleteMeal: (id) => up((d) => ({ meals: d.meals.filter((m) => m.id !== id) })),
+    saveRoutines: (routines) => up(() => ({ routines })),
+    saveGoals: (goals) => up((d) => ({ goals: { ...d.goals, ...goals } })),
+    saveRecipes: (recipes) => up(() => ({ recipes })),
+    // Entreno a medias: sobrevive a recargas de la página.
+    saveDraft: (draft) => up(() => ({ draft })),
+    // Lo que te apetece comer cada día: { [fecha]: texto }
+    saveCraving: (date, text) => up((d) => {
+      const next = { ...d.cravings };
+      if (text.trim()) next[date] = text.trim(); else delete next[date];
+      return { cravings: next };
     }),
-    addSession: (s) => setData((d) => ({ ...d, sessions: [...d.sessions, { id: crypto.randomUUID(), profileId: d.activeProfileId, ...s }] })),
-    addMeal: (m) => setData((d) => ({ ...d, meals: [...d.meals, { id: crypto.randomUUID(), profileId: d.activeProfileId, ...m }] })),
-    deleteMeal: (id) => setData((d) => ({ ...d, meals: d.meals.filter((m) => m.id !== id) })),
-    saveRoutines: (routines) => setData((d) => ({ ...d, routines })),
-    saveGoals: (goals) => setData((d) => ({ ...d, goals: { ...d.goals, [d.activeProfileId]: { ...(d.goals[d.activeProfileId] || defaultGoals), ...goals } } })),
-    saveRecipes: (recipes) => setData((d) => ({ ...d, recipes })),
-    // Lo que le apetece comer a un perfil cada día: { [perfil]: { [fecha]: texto } }
-    saveCraving: (date, text) => setData((d) => {
-      const mine = { ...(d.cravings?.[d.activeProfileId] || {}) };
-      if (text.trim()) mine[date] = text.trim(); else delete mine[date];
-      return { ...d, cravings: { ...(d.cravings || {}), [d.activeProfileId]: mine } };
-    }),
+    exportData: () => {
+      const blob = new Blob([JSON.stringify({ app: 'gym', version: 2, data }, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `gym-copia-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    },
+    importData: (text) => {
+      const parsed = JSON.parse(text);
+      const incoming = parsed?.data;
+      if (parsed?.app !== 'gym' || !incoming || !Array.isArray(incoming.sessions)) throw new Error('El archivo no es una copia válida.');
+      setData({ ...blank(), ...incoming });
+    },
   };
   return <Ctx.Provider value={api}>{children}</Ctx.Provider>;
 };
