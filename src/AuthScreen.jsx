@@ -24,9 +24,9 @@ export default function AuthScreen({ onAuth }) {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-50 font-sans text-zinc-950 dark:bg-black dark:text-white">
+    <div className="min-h-screen bg-white text-zinc-950 dark:bg-black dark:text-white">
       <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-5 py-10">
-        <span className="flex size-12 items-center justify-center rounded-full bg-emerald-700 text-white"><Dumbbell size={22} /></span>
+        <span className="flex size-12 items-center justify-center rounded-full bg-zinc-950 dark:bg-white dark:text-zinc-950 text-white"><Dumbbell size={22} /></span>
         <h1 className="mt-5 text-3xl font-extrabold tracking-tight">{register ? 'Crea tu cuenta' : 'Bienvenido de nuevo'}</h1>
         <p className={`mt-1 text-sm ${muted}`}>{register ? 'Tus entrenos, comidas y objetivos quedan guardados en tu cuenta.' : 'Entra para continuar con tus entrenos.'}</p>
         <Card className="mt-6">
@@ -38,7 +38,7 @@ export default function AuthScreen({ onAuth }) {
             <button type="submit" disabled={busy} className={primary}>{register ? 'Crear cuenta' : 'Entrar'}</button>
           </form>
         </Card>
-        <button type="button" onClick={() => { setMode(register ? 'login' : 'register'); setError(''); }} className="mt-4 text-center text-sm font-semibold text-emerald-700 dark:text-emerald-400">
+        <button type="button" onClick={() => { setMode(register ? 'login' : 'register'); setError(''); }} className="mt-4 text-center text-sm font-semibold text-zinc-950 dark:text-white">
           {register ? 'Ya tengo cuenta' : 'Crear una cuenta nueva'}
         </button>
       </main>
