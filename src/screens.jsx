@@ -1,12 +1,18 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Check, ChevronRight, FileText, Pencil, Plus, Repeat, Trash2, Trophy, Utensils, X } from 'lucide-react';
+import { Beef, Calendar, Check, ChevronLeft, ChevronRight, Coffee, Cookie, Copy, Droplets, Dumbbell, FileText, Flame, History, Minus, Moon, Pencil, Plus, Repeat, Sparkles, Sun, Target, Timer, Trash2, TrendingUp, Trophy, Utensils, Wheat, X, Zap } from 'lucide-react';
 import { useGym } from './store';
 import { MUSCLES, calcStreak, e1rm, fmt, iso, parseRoutines, weekSets, weekVol } from './lib';
 import { Bar, Card, Ring, chip, field, muted, primary } from './ui';
 
-const good = 'text-zinc-950 dark:text-white';
 const bad = 'text-rose-600 dark:text-rose-400';
 const shortDate = (d) => new Date(`${d}T00:00`).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+const dayParts = (d) => {
+  const dt = new Date(`${d}T00:00`);
+  return {
+    day: dt.toLocaleDateString('es-ES', { day: '2-digit' }),
+    month: dt.toLocaleDateString('es-ES', { month: 'short' }).replace('.', ''),
+  };
+};
 const trash = 'flex size-8 shrink-0 items-center justify-center rounded-full text-slate-400 hover:bg-rose-50 hover:text-rose-700 dark:hover:bg-rose-500/10 dark:hover:text-rose-300';
 const mmss = (t) => `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`;
 
@@ -21,33 +27,33 @@ function RoutineEditor({ routine, onSelect }) {
   useEffect(() => setName(routine), [routine]);
   const list = routines[routine] || [];
   const update = (next) => saveRoutines({ ...routines, [routine]: next });
-  
+
   const addExercise = (event) => {
     event.preventDefault();
     if (!exName.trim()) return;
-    update([...list, { 
-      name: exName.trim(), 
+    update([...list, {
+      name: exName.trim(),
       muscle,
       targetReps: targetReps.trim(),
-      defaultWeight: defaultWeight.trim() !== '' ? Number(defaultWeight.replace(',', '.')) : ''
+      defaultWeight: defaultWeight.trim() !== '' ? Number(defaultWeight.replace(',', '.')) : '',
     }]);
     setExName(''); setTargetReps(''); setDefaultWeight('');
   };
-  
+
   const rename = () => {
     const next = name.trim();
     if (!next || next === routine || routines[next]) { setName(routine); return; }
     saveRoutines(Object.fromEntries(Object.entries(routines).map(([k, v]) => [k === routine ? next : k, v])));
     onSelect(next);
   };
-  
+
   const remove = () => {
     const rest = { ...routines };
     delete rest[routine];
     saveRoutines(rest);
     onSelect(Object.keys(rest)[0]);
   };
-  
+
   return (
     <div className="mt-4 space-y-3">
       <input aria-label="Nombre de la rutina" value={name} maxLength={30} onChange={(e) => setName(e.target.value)} onBlur={rename} className={`${field} w-full font-bold`} />
@@ -70,7 +76,7 @@ function RoutineEditor({ routine, onSelect }) {
         <div className="flex gap-2">
           <input aria-label="Baremo" placeholder="Reps (ej: 8-12)" value={targetReps} onChange={(e) => setTargetReps(e.target.value)} className={`${field} w-full min-w-0`} />
           <input inputMode="decimal" aria-label="Peso base" placeholder="Peso base (kg)" value={defaultWeight} onChange={(e) => setDefaultWeight(e.target.value)} className={`${field} w-full min-w-0`} />
-          <button type="submit" aria-label="Añadir ejercicio" className="flex size-11 shrink-0 items-center justify-center rounded-full bg-zinc-950 dark:bg-white dark:text-zinc-950 text-white"><Plus size={18} /></button>
+          <button type="submit" aria-label="Añadir ejercicio" className="flex size-11 shrink-0 items-center justify-center rounded-full bg-zinc-950 text-white dark:bg-white dark:text-zinc-950"><Plus size={18} /></button>
         </div>
       </form>
       <button type="button" onClick={remove} disabled={Object.keys(routines).length < 2} className={`inline-flex items-center gap-1 text-sm font-semibold disabled:opacity-40 ${bad}`}><Trash2 size={15} />Eliminar rutina</button>
@@ -148,6 +154,7 @@ function Activity({ sessions, activeDate }) {
   const [range, setRange] = useState('1S');
   const vol = (list) => list.reduce((t, s) => t + s.sets.reduce((u, x) => u + x.kg * x.reps, 0), 0);
   const monday = new Date();
+  monday.setHours(0, 0, 0, 0);
   monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
   const bars = range === '1S'
     ? DAYS.map((label, i) => {
@@ -159,99 +166,387 @@ function Activity({ sessions, activeDate }) {
     : [3, 2, 1, 0].map((off) => ({ label: off ? `−${off} sem` : 'Esta', v: weekVol(sessions, off), on: off === 0 }));
   const top = Math.max(...bars.map((b) => b.v), 1);
   const avg = bars.reduce((t, b) => t + b.v, 0) / bars.length;
+  const totalVol = bars.reduce((t, b) => t + b.v, 0);
+
   return (
-    <section>
-      <div className="flex items-baseline justify-between">
-        <h2 className="text-xl font-bold tracking-tight">Actividad</h2>
-        <span className={`text-sm ${muted}`}>Media {fmt(avg)} kg</span>
-      </div>
-      <div className="mt-3 flex gap-2">
-        {[['1S', '1 semana'], ['1M', '1 mes']].map(([r, label]) => <button key={r} type="button" onClick={() => setRange(r)} aria-pressed={range === r} className={`${chip(range === r)} flex-1`}>{label}</button>)}
-      </div>
-      <div className="mt-5">
-        <div className="relative flex h-36 items-end gap-2">
-          {avg > 0 && <div className="absolute inset-x-0 border-t border-dashed border-zinc-400" style={{ bottom: `${(avg / top) * 100}%` }} />}
-          {bars.map((b) => <div key={b.label} title={`${fmt(b.v)} kg`} className={`relative flex-1 rounded-xl ${b.on ? 'bg-zinc-950 dark:bg-white' : 'bg-zinc-400 dark:bg-zinc-600'}`} style={{ height: `${Math.max(4, (b.v / top) * 100)}%` }} />)}
+    <Card>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2.5">
+          <span className="flex size-8 items-center justify-center rounded-full bg-zinc-950 text-white dark:bg-white dark:text-zinc-950">
+            <TrendingUp size={15} />
+          </span>
+          <div>
+            <h2 className="text-base font-bold leading-none tracking-tight">Actividad</h2>
+            <p className={`mt-1 text-xs ${muted}`}>
+              {totalVol > 0 ? `Media ${fmt(avg)} kg` : 'Sin volumen en este periodo'}
+            </p>
+          </div>
         </div>
-        <div className="mt-2 flex gap-2">{bars.map((b) => <span key={b.label} className={`flex-1 text-center text-[11px] ${muted}`}>{b.label}</span>)}</div>
+
+        <div className="flex rounded-full bg-zinc-200/80 p-1 dark:bg-zinc-800">
+          {[['1S', '1S'], ['1M', '1M']].map(([r, label]) => (
+            <button
+              key={r}
+              type="button"
+              onClick={() => setRange(r)}
+              aria-pressed={range === r}
+              className={`rounded-full px-3 py-1 text-xs font-extrabold transition-all ${
+                range === r
+                  ? 'bg-zinc-950 text-white dark:bg-white dark:text-zinc-950'
+                  : 'text-zinc-500 hover:text-zinc-950 dark:text-zinc-400 dark:hover:text-white'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
-    </section>
+
+      <div className="mt-5">
+        <div className="relative flex h-32 items-end gap-2">
+          {avg > 0 && (
+            <div className="pointer-events-none absolute inset-x-0 z-10 flex items-center border-t border-dashed border-zinc-400/70 dark:border-zinc-600" style={{ bottom: `${(avg / top) * 100}%` }}>
+              <span className=" -mt-4 rounded bg-zinc-100 px-1 text-[9px] font-bold uppercase tracking-wider text-zinc-400 dark:bg-zinc-900 dark:text-zinc-500">
+                media
+              </span>
+            </div>
+          )}
+          {bars.map((b) => {
+            const pct = b.v > 0 ? Math.max(10, (b.v / top) * 100) : 5;
+            return (
+              <div key={b.label} title={`${fmt(b.v)} kg`} className="flex h-full flex-1 flex-col items-center justify-end gap-1">
+                {b.v > 0 && b.on && (
+                  <span className="text-[10px] font-extrabold text-zinc-950 dark:text-white">
+                    {b.v >= 1000 ? `${fmt(b.v / 1000, 1)}t` : fmt(b.v)}
+                  </span>
+                )}
+                <div
+                  className={`w-full rounded-2xl transition-all duration-300 ${
+                    b.on
+                      ? 'bg-zinc-950 dark:bg-white'
+                      : b.v > 0
+                        ? 'bg-zinc-300 dark:bg-zinc-700'
+                        : 'bg-zinc-200/70 dark:bg-zinc-800/70'
+                  }`}
+                  style={{ height: `${pct}%` }}
+                />
+              </div>
+            );
+          })}
+        </div>
+        <div className="mt-2.5 flex gap-2">
+          {bars.map((b) => (
+            <span
+              key={b.label}
+              className={`flex-1 rounded-full py-0.5 text-center text-[11px] font-bold ${
+                b.on
+                  ? 'bg-zinc-950 text-white dark:bg-white dark:text-zinc-950'
+                  : muted
+              }`}
+            >
+              {b.label}
+            </span>
+          ))}
+        </div>
+      </div>
+    </Card>
   );
 }
 
 export function Home({ go, routine, activeDate }) {
-  const { sessions, routines, saveRoutines } = useGym();
+  const { sessions, routines, saveRoutines, meals = [], goals, draft } = useGym();
   const [editing, setEditing] = useState(false);
   const [importing, setImporting] = useState(false);
-  const mySessions = sessions;
-  const done = mySessions.filter((x) => x.date === activeDate);
-  const week = weekVol(mySessions, 0), prev = weekVol(mySessions, 1);
+
+  const done = sessions.filter((x) => x.date === activeDate);
+  const week = weekVol(sessions, 0), prev = weekVol(sessions, 1);
   const delta = prev ? ((week - prev) / prev) * 100 : null;
-  const exercises = routines[routine];
+  const streak = calcStreak(sessions);
+
+  const exercises = routines[routine] || [];
+  const musclesInRoutine = [...new Set(exercises.map((e) => e.muscle))];
+
+  const dayMeals = meals.filter((m) => m.date === activeDate);
+  const dayKcal = dayMeals.reduce((t, m) => t + m.kcal, 0);
+  const kcalGoal = goals?.kcal || 2400;
+
   const create = () => {
     let n = 'Nueva rutina', i = 2;
     while (routines[n]) { n = `Nueva rutina ${i}`; i += 1; }
     saveRoutines({ ...routines, [n]: [] });
     go('inicio', n);
   };
+
+  const hasActiveDraft = draft && Array.isArray(draft.sets) && draft.sets.length > 0;
+
   return (
     <div className="space-y-4">
-      <Activity sessions={mySessions} activeDate={activeDate} />
-      <Card>
-        <div className={`flex items-center justify-between text-sm font-medium ${muted}`}>
-          <span>Entrenamiento de hoy</span>
-          <span className="flex items-center gap-1">
-            <button type="button" onClick={() => { setEditing(false); setImporting((v) => !v); }} aria-label="Importar rutina desde texto" aria-pressed={importing} className="flex size-8 items-center justify-center rounded-full hover:bg-zinc-200 dark:hover:bg-zinc-800">{importing ? <X size={16} /> : <FileText size={16} />}</button>
-            <button type="button" onClick={() => { setImporting(false); setEditing((v) => !v); }} aria-label="Editar rutinas" aria-pressed={editing} className="flex size-8 items-center justify-center rounded-full hover:bg-zinc-200 dark:hover:bg-zinc-800">{editing ? <X size={16} /> : <Pencil size={16} />}</button>
+      {/* Gráfico de actividad semanal/mensual */}
+      <Activity sessions={sessions} activeDate={activeDate} />
+
+      {/* Bento de métricas rápidas: Racha + Volumen + Nutrición */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="flex flex-col justify-between rounded-[26px] bg-zinc-950 p-4 text-white dark:bg-zinc-900 dark:ring-1 dark:ring-zinc-800">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">Racha</span>
+            <Flame size={15} className="text-amber-400" />
+          </div>
+          <div className="my-2.5 flex items-baseline gap-1.5">
+            <span className="text-4xl font-extrabold leading-none tracking-tight">{streak}</span>
+            <span className="text-xs font-semibold text-zinc-400">{streak === 1 ? 'día' : 'días'}</span>
+          </div>
+          <div className="flex items-end justify-between pt-1 opacity-40" aria-hidden="true">
+            {[4, 7, 4, 10, 4, 7, 4].map((h, idx) => (
+              <span
+                key={idx}
+                className={`w-0.5 rounded-full ${streak > 0 && idx === 3 ? 'bg-white opacity-100' : 'bg-zinc-500'}`}
+                style={{ height: `${h * 1.4}px` }}
+              />
+            ))}
+          </div>
+        </div>
+
+        <div className="flex flex-col justify-between rounded-[26px] bg-zinc-100 p-4 dark:bg-zinc-900">
+          <div className="flex items-center justify-between gap-1">
+            <span className={`truncate text-[11px] font-bold uppercase tracking-wider ${muted}`}>Semana</span>
+            {delta !== null ? (
+              <span className={`rounded-full px-2 py-0.5 text-[10px] font-extrabold ${delta < 0 ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400' : 'bg-zinc-200 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200'}`}>
+                {delta < 0 ? '−' : '+'}{fmt(Math.abs(delta), 0)}%
+              </span>
+            ) : (
+              <Dumbbell size={14} className={muted} />
+            )}
+          </div>
+          <div className="my-2.5 flex items-baseline gap-1">
+            <span className="text-3xl font-extrabold leading-none tracking-tight">{fmt(week)}</span>
+            <span className={`text-xs font-bold ${muted}`}>kg</span>
+          </div>
+          <div className="flex items-end justify-between pt-1 opacity-40" aria-hidden="true">
+            {[4, 7, 4, 10, 4, 7, 4].map((h, idx) => (
+              <span
+                key={idx}
+                className={`w-0.5 rounded-full ${week > 0 && idx === 3 ? 'bg-zinc-950 opacity-100 dark:bg-white' : 'bg-zinc-400 dark:bg-zinc-600'}`}
+                style={{ height: `${h * 1.4}px` }}
+              />
+            ))}
+          </div>
+        </div>
+
+        {/* Acceso directo a dieta del día */}
+        <button
+          type="button"
+          onClick={() => go('dieta')}
+          className="col-span-2 flex items-center justify-between gap-3 rounded-[24px] bg-zinc-100 p-3.5 text-left transition-colors hover:bg-zinc-200/70 dark:bg-zinc-900 dark:hover:bg-zinc-800/80"
+        >
+          <div className="flex items-center gap-3">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-zinc-200/80 text-zinc-950 dark:bg-zinc-800 dark:text-white">
+              <Utensils size={17} />
+            </span>
+            <div>
+              <p className={`text-[11px] font-bold uppercase tracking-wider ${muted}`}>Nutrición del día</p>
+              <p className="mt-0.5 text-sm font-extrabold">
+                {fmt(dayKcal)} <span className={`font-semibold ${muted}`}>/ {fmt(kcalGoal)} kcal</span>
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="w-16">
+              <Bar value={(dayKcal / kcalGoal) * 100} />
+            </div>
+            <ChevronRight size={17} className={muted} />
+          </div>
+        </button>
+      </div>
+
+      {/* Banner de entreno en curso si hay borrador guardado */}
+      {hasActiveDraft && (
+        <button
+          type="button"
+          onClick={() => go('entreno', draft.routine)}
+          className="flex w-full items-center justify-between gap-3 rounded-[24px] bg-zinc-950 px-4 py-3.5 text-left text-white transition-transform active:scale-[0.99] dark:bg-white dark:text-zinc-950"
+        >
+          <div className="flex items-center gap-3">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-white/15 dark:bg-zinc-950/10">
+              <Zap size={17} />
+            </span>
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-wider opacity-70">Entreno en curso</p>
+              <p className="text-sm font-extrabold">{draft.routine} · {draft.sets.length} {draft.sets.length === 1 ? 'serie' : 'series'}</p>
+            </div>
+          </div>
+          <span className="rounded-full bg-white px-3 py-1 text-xs font-extrabold text-zinc-950 dark:bg-zinc-950 dark:text-white">
+            Seguir →
           </span>
+        </button>
+      )}
+
+      {/* Tarjeta principal de rutina */}
+      <Card>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="flex size-8 items-center justify-center rounded-full bg-zinc-200 text-zinc-950 dark:bg-zinc-800 dark:text-white">
+              <Dumbbell size={15} />
+            </span>
+            <span className={`text-xs font-bold uppercase tracking-wider ${muted}`}>Rutina de entrenamiento</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => { setEditing(false); setImporting((v) => !v); }}
+              aria-label="Importar rutina desde texto"
+              aria-pressed={importing}
+              className={`flex size-8 items-center justify-center rounded-full transition-colors ${importing ? 'bg-zinc-950 text-white dark:bg-white dark:text-zinc-950' : 'hover:bg-zinc-200 dark:hover:bg-zinc-800'}`}
+            >
+              {importing ? <X size={15} /> : <FileText size={15} />}
+            </button>
+            <button
+              type="button"
+              onClick={() => { setImporting(false); setEditing((v) => !v); }}
+              aria-label="Editar rutinas"
+              aria-pressed={editing}
+              className={`flex size-8 items-center justify-center rounded-full transition-colors ${editing ? 'bg-zinc-950 text-white dark:bg-white dark:text-zinc-950' : 'hover:bg-zinc-200 dark:hover:bg-zinc-800'}`}
+            >
+              {editing ? <X size={15} /> : <Pencil size={15} />}
+            </button>
+          </div>
         </div>
-        <div className="mt-3 flex flex-wrap gap-2">
+
+        {/* Selector de rutinas */}
+        <div className="mt-3.5 flex flex-wrap gap-1.5">
           {Object.keys(routines).map((r) => (
-            <button key={r} type="button" onClick={() => go('inicio', r)} aria-pressed={r === routine}
-              className={`rounded-full px-3 py-1 text-sm font-semibold ${r === routine ? 'bg-zinc-950 text-white dark:bg-white dark:text-zinc-950' : 'bg-zinc-200 dark:bg-zinc-800'}`}>{r}</button>
+            <button
+              key={r}
+              type="button"
+              onClick={() => go('inicio', r)}
+              aria-pressed={r === routine}
+              className={`rounded-full px-3.5 py-1.5 text-xs font-extrabold transition-colors ${
+                r === routine
+                  ? 'bg-zinc-950 text-white dark:bg-white dark:text-zinc-950'
+                  : 'bg-zinc-200/80 text-zinc-700 hover:bg-zinc-300/80 dark:bg-zinc-800 dark:text-zinc-300'
+              }`}
+            >
+              {r}
+            </button>
           ))}
-          {editing && <button type="button" onClick={create} aria-label="Nueva rutina" className="flex size-8 items-center justify-center rounded-full bg-zinc-950 dark:bg-white dark:text-zinc-950 text-white"><Plus size={16} /></button>}
+          {editing && (
+            <button type="button" onClick={create} aria-label="Nueva rutina" className="flex size-8 items-center justify-center rounded-full bg-zinc-950 text-white dark:bg-white dark:text-zinc-950">
+              <Plus size={15} />
+            </button>
+          )}
         </div>
-        {importing ? <ImportRoutines onDone={(r) => { setImporting(false); go('inicio', r); }} /> : editing ? <RoutineEditor routine={routine} onSelect={(r) => go('inicio', r)} /> : (
+
+        {importing ? (
+          <ImportRoutines onDone={(r) => { setImporting(false); go('inicio', r); }} />
+        ) : editing ? (
+          <RoutineEditor routine={routine} onSelect={(r) => go('inicio', r)} />
+        ) : (
           <>
-            <p className="mt-4 text-3xl font-extrabold tracking-tight">{routine}</p>
-            <p className={`mt-1 text-sm ${muted}`}>{exercises.length} ejercicios</p>
-            {exercises.length === 0 && <p className={`mt-3 text-sm ${muted}`}>Pulsa el lápiz para añadir ejercicios.</p>}
-            <ul className="mt-4 space-y-2 text-sm">
-              {exercises.map((e) => (
-                <li key={e.name} className="flex justify-between">
-                  <span>{e.name} {e.targetReps && <span className="ml-1 text-xs text-zinc-950 dark:text-white">[{e.targetReps}]</span>}</span>
-                  <b>{e.muscle}</b>
-                </li>
-              ))}
-            </ul>
-            <button type="button" onClick={() => go('entreno')} disabled={!exercises.length} className={`${primary} mt-5 !h-12`}>Empezar entreno</button>
+            <div className="mt-4 flex items-end justify-between gap-2">
+              <div>
+                <p className="text-3xl font-extrabold leading-none tracking-tight">{routine}</p>
+                <p className={`mt-1.5 text-xs font-medium ${muted}`}>
+                  {exercises.length} {exercises.length === 1 ? 'ejercicio' : 'ejercicios'}
+                  {musclesInRoutine.length > 0 && ` · ${musclesInRoutine.join(' · ')}`}
+                </p>
+              </div>
+            </div>
+
+            {exercises.length === 0 ? (
+              <p className={`mt-4 rounded-2xl bg-zinc-200/60 p-4 text-center text-sm dark:bg-zinc-800/60 ${muted}`}>
+                Pulsa el lápiz de arriba para añadir ejercicios a esta rutina.
+              </p>
+            ) : (
+              <ol className="mt-4 space-y-2">
+                {exercises.map((e, idx) => (
+                  <li key={e.name} className="flex items-center justify-between gap-3 rounded-2xl bg-zinc-200/70 px-3.5 py-2.5 dark:bg-zinc-800/70">
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <span className={`text-xs font-extrabold ${muted}`}>
+                        {String(idx + 1).padStart(2, '0')}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-bold">{e.name}</p>
+                        {(e.targetReps || (e.defaultWeight !== '' && e.defaultWeight !== undefined)) && (
+                          <p className={`text-[11px] ${muted}`}>
+                            {[
+                              e.targetReps && `${e.targetReps} reps`,
+                              e.defaultWeight !== '' && e.defaultWeight !== undefined && `${e.defaultWeight} kg`,
+                            ].filter(Boolean).join(' · ')}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <span className="shrink-0 rounded-full bg-white px-2.5 py-0.5 text-[11px] font-bold text-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">
+                      {e.muscle}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            )}
+
+            <button
+              type="button"
+              onClick={() => go('entreno')}
+              disabled={!exercises.length}
+              className={`${primary} mt-5 flex !h-12 items-center justify-center gap-2 !text-sm`}
+            >
+              <Zap size={16} />
+              {hasActiveDraft && draft.routine === routine ? 'Continuar entreno' : 'Empezar entreno'}
+            </button>
           </>
         )}
       </Card>
+
+      {/* Entrenos realizados este día */}
       <section>
-        <h2 className="text-xl font-bold tracking-tight">Entrenos realizados</h2>
-        <div className="mt-3 space-y-2">
-          {done.length === 0 && <p className={`text-sm ${muted}`}>Sin entrenos este día.</p>}
-          {done.map((x) => (
-            <button key={x.id} type="button" onClick={() => go('progreso')} className="flex h-14 w-full items-center justify-between rounded-2xl bg-zinc-200 px-5 text-left text-sm font-semibold dark:bg-zinc-800">
-              <span>{x.name}</span><ChevronRight size={18} />
-            </button>
-          ))}
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-bold tracking-tight">Entrenos realizados</h2>
+          {done.length > 0 && (
+            <span className="rounded-full bg-zinc-100 px-3 py-1 text-xs font-bold dark:bg-zinc-900">
+              {done.length} {done.length === 1 ? 'sesión' : 'sesiones'}
+            </span>
+          )}
         </div>
-      </section>
-      <section>
-        <h2 className="text-xl font-bold tracking-tight">Métricas</h2>
-        <div className="mt-3 grid grid-cols-2 gap-3">
-          <Card className="!rounded-3xl !bg-zinc-700 !p-4 text-white dark:!bg-zinc-800">
-            <p className="text-sm text-zinc-300">Racha</p>
-            <p className="mt-2 text-2xl font-extrabold">{calcStreak(mySessions)} días</p>
-          </Card>
-          <Card className="!rounded-3xl !bg-zinc-700 !p-4 text-white dark:!bg-zinc-800">
-            <p className="text-sm text-zinc-300">Volumen semanal</p>
-            <p className="mt-2 text-2xl font-extrabold">{fmt(week)} kg</p>
-            {delta !== null && <p className={`text-xs font-semibold ${delta < 0 ? 'text-rose-300' : 'text-zinc-300'}`}>{delta < 0 ? '−' : '+'}{fmt(Math.abs(delta), 1)} % vs. anterior</p>}
-          </Card>
+
+        <div className="mt-3 space-y-2">
+          {done.length === 0 ? (
+            <Card className="text-center">
+              <Dumbbell size={20} className={`mx-auto ${muted}`} />
+              <p className={`mt-2 text-sm ${muted}`}>Sin entrenos registrados este día.</p>
+            </Card>
+          ) : (
+            done.map((x) => {
+              const vol = x.sets.reduce((t, y) => t + y.kg * y.reps, 0);
+              const prs = x.sets.filter((y) => y.pr).length;
+              return (
+                <button
+                  key={x.id}
+                  type="button"
+                  onClick={() => go('progreso')}
+                  className="flex w-full items-center justify-between gap-3 rounded-[24px] bg-zinc-100 p-3.5 text-left transition-colors hover:bg-zinc-200/80 dark:bg-zinc-900 dark:hover:bg-zinc-800"
+                >
+                  <div className="flex min-w-0 items-center gap-3">
+                    <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-zinc-950 text-white dark:bg-white dark:text-zinc-950">
+                      <Check size={18} strokeWidth={2.5} />
+                    </span>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="truncate font-bold">{x.name}</p>
+                        {prs > 0 && (
+                          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-extrabold text-amber-600 dark:text-amber-400">
+                            <Flame size={10} />{prs} PR
+                          </span>
+                        )}
+                      </div>
+                      <p className={`mt-0.5 text-xs ${muted}`}>
+                        {x.sets.length} series · <b className="font-semibold text-zinc-700 dark:text-zinc-300">{fmt(vol)} kg</b>
+                      </p>
+                    </div>
+                  </div>
+                  <ChevronRight size={18} className={`shrink-0 ${muted}`} />
+                </button>
+              );
+            })
+          )}
         </div>
       </section>
     </div>
@@ -298,7 +593,7 @@ function RepsPicker({ value, onChange }) {
 
 export function Workout({ routine, go, activeDate }) {
   const { addSession, sessions, routines, draft, saveDraft } = useGym();
-  const exercises = routines[routine];
+  const exercises = routines[routine] || [];
   const [name, setName] = useState(exercises[0]?.name || '');
   const [sets, setSets] = useState(() => (draft?.routine === routine && draft.date === activeDate ? draft.sets : []));
   const [input, setInput] = useState({ kg: '', reps: '' });
@@ -312,7 +607,9 @@ export function Workout({ routine, go, activeDate }) {
   const bestBefore = Math.max(0, ...sessions.flatMap((x) => x.sets).filter((x) => x.ex === name).map((x) => e1rm(x.kg, x.reps)));
   const mine = sets.map((x, idx) => ({ ...x, idx })).filter((x) => x.ex === name);
   const reps = Number(input.reps) || last?.reps || 10;
-  const pending = exercises.filter((e) => !sets.some((x) => x.ex === e.name)).length;
+  const completedCount = exercises.filter((e) => sets.some((x) => x.ex === e.name)).length;
+  const sessionVol = sets.reduce((t, x) => t + x.kg * x.reps, 0);
+
   useEffect(() => { setInput(startValues(currentEx, last)); }, [name]);
 
   // Descanso: cuenta atrás y vibración al terminar.
@@ -332,11 +629,11 @@ export function Workout({ routine, go, activeDate }) {
     saveDraft(next.length ? { routine, date: activeDate, sets: next } : null);
   };
 
-  const push = (kg, reps) => {
-    if (!name || !(kg >= 0) || !(reps > 0)) return;
+  const push = (kg, r) => {
+    if (!name || !(kg >= 0) || !(r > 0)) return;
     const prior = Math.max(bestBefore, ...sets.filter((x) => x.ex === name).map((x) => e1rm(x.kg, x.reps)));
-    const pr = bestBefore > 0 && e1rm(kg, reps) > prior;
-    commit([...sets, { ex: name, muscle: currentEx?.muscle, kg, reps, ...(pr && { pr: true }) }]);
+    const pr = bestBefore > 0 && e1rm(kg, r) > prior;
+    commit([...sets, { ex: name, muscle: currentEx?.muscle, kg, reps: r, ...(pr && { pr: true }) }]);
     setRest(90);
     setTargetRest(90);
   };
@@ -346,6 +643,13 @@ export function Workout({ routine, go, activeDate }) {
     const typed = input.kg.trim();
     const kg = typed !== '' ? Number(typed.replace(',', '.')) : hasBase ? Number(currentEx.defaultWeight) : last?.kg;
     push(kg, reps);
+  };
+
+  const stepKg = (delta) => {
+    const typed = input.kg.trim();
+    const base = typed !== '' ? Number(typed.replace(',', '.')) : hasBase ? Number(currentEx.defaultWeight) : (last?.kg ?? 0);
+    const next = Math.max(0, Math.round(((Number.isFinite(base) ? base : 0) + delta) * 10) / 10);
+    setInput((v) => ({ ...v, kg: String(next) }));
   };
 
   const adjustRest = (amount) => {
@@ -359,88 +663,387 @@ export function Workout({ routine, go, activeDate }) {
     go('progreso');
   };
 
+  // Previsualización en vivo del 1RM estimado para la serie actual
+  const typedKg = input.kg.trim();
+  const resolvedKg = typedKg !== '' ? Number(typedKg.replace(',', '.')) : hasBase ? Number(currentEx.defaultWeight) : last?.kg;
+  const preview1rm = Number.isFinite(resolvedKg) && resolvedKg > 0 && reps > 0 ? e1rm(resolvedKg, reps) : 0;
+  const currentBest = Math.max(bestBefore, ...sets.filter((x) => x.ex === name).map((x) => e1rm(x.kg, x.reps)));
+  const willBePr = bestBefore > 0 && preview1rm > currentBest;
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="text-5xl font-extrabold leading-none">{pending}</span>
-          <span className="text-sm leading-tight">Ejercicios<br />por hacer</span>
-        </div>
-        <button type="button" onClick={finish} disabled={!sets.length} className="h-10 rounded-full bg-zinc-200 px-4 text-sm font-semibold disabled:opacity-40 dark:bg-zinc-800">Terminar entreno</button>
-      </div>
-
-      {exercises.length === 0 && <p className={`text-sm ${muted}`}>Esta rutina no tiene ejercicios. Añádelos desde Inicio con el lápiz.</p>}
-      <div className="-mx-5 flex gap-2 overflow-x-auto px-5 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {exercises.map((e) => {
-          const n = sets.filter((x) => x.ex === e.name).length, on = e.name === name;
-          return (
-            <button key={e.name} type="button" onClick={() => setName(e.name)} aria-pressed={on} className={`shrink-0 rounded-2xl px-4 py-3 text-left ${on ? 'bg-zinc-950 text-white dark:bg-white dark:text-zinc-950' : 'bg-zinc-200 dark:bg-zinc-800'}`}>
-              <p className="text-sm font-semibold">{e.name}</p>
-              <p className="text-xs opacity-60">{n} {n === 1 ? 'serie' : 'series'}</p>
-            </button>
-          );
-        })}
-      </div>
-
-      {rest > 0 && (
-        <Card>
-          <Ring value={(rest / targetRest) * 100} size={200}>
-            <span className="text-5xl font-extrabold">{rest}<span className="text-xl">s</span></span>
-            <span className={`text-xs ${muted}`}>Descanso · {mmss(targetRest)}</span>
-          </Ring>
-          <div className="mt-5 flex justify-center gap-2">
-            {[-15, 15].map((n) => <button key={n} type="button" onClick={() => adjustRest(n)} className={chip(false)}>{n < 0 ? '−' : '+'}15 s</button>)}
-            <button type="button" onClick={() => setRest(0)} className={chip(true)}>Saltar</button>
+      {/* Cabecera Bento de la sesión */}
+      <Card className="!p-4">
+        <div className="flex items-center justify-between gap-2">
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5">
+              <span className="flex size-5 items-center justify-center rounded-full bg-zinc-950 text-white dark:bg-white dark:text-zinc-950">
+                <Dumbbell size={11} />
+              </span>
+              <span className={`truncate text-xs font-bold uppercase tracking-wider ${muted}`}>{routine}</span>
+            </div>
+            <div className="mt-1.5 flex items-baseline gap-2">
+              <span className="text-3xl font-extrabold leading-none tracking-tight">
+                {completedCount}<span className={`text-lg font-bold ${muted}`}>/{exercises.length}</span>
+              </span>
+              <span className={`text-xs font-semibold ${muted}`}>ejercicios</span>
+            </div>
           </div>
+
+          <button
+            type="button"
+            onClick={finish}
+            disabled={!sets.length}
+            className="inline-flex h-11 shrink-0 items-center gap-1.5 rounded-full bg-zinc-950 px-5 text-sm font-bold text-white transition-all hover:bg-zinc-800 disabled:bg-zinc-200 disabled:text-zinc-400 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200 dark:disabled:bg-zinc-800 dark:disabled:text-zinc-600"
+          >
+            <Check size={16} strokeWidth={2.5} />
+            Terminar
+          </button>
+        </div>
+
+        {/* Barra de progreso por ejercicio */}
+        {exercises.length > 0 && (
+          <div className="mt-3.5 grid gap-1" style={{ gridTemplateColumns: `repeat(${exercises.length}, minmax(0, 1fr))` }} aria-hidden="true">
+            {exercises.map((e) => {
+              const done = sets.some((x) => x.ex === e.name);
+              const active = e.name === name;
+              return (
+                <span
+                  key={e.name}
+                  className={`h-1.5 rounded-full transition-all ${
+                    done
+                      ? 'bg-zinc-950 dark:bg-white'
+                      : active
+                        ? 'bg-zinc-400 dark:bg-zinc-500'
+                        : 'bg-zinc-200 dark:bg-zinc-800'
+                  }`}
+                />
+              );
+            })}
+          </div>
+        )}
+
+        {/* Métricas en vivo de la sesión */}
+        <div className={`mt-3 flex items-center justify-between border-t border-zinc-200 pt-2.5 text-xs dark:border-zinc-800 ${muted}`}>
+          <span><b className="font-bold text-zinc-950 dark:text-white">{sets.length}</b> {sets.length === 1 ? 'serie hecha' : 'series hechas'}</span>
+          <span>Volumen: <b className="font-bold text-zinc-950 dark:text-white">{fmt(sessionVol)} kg</b></span>
+        </div>
+      </Card>
+
+      {/* Carrusel de ejercicios */}
+      {exercises.length === 0 ? (
+        <Card className="text-center">
+          <p className={`text-sm ${muted}`}>Esta rutina no tiene ejercicios.</p>
+          <button type="button" onClick={() => go('inicio')} className="mt-3 rounded-full bg-zinc-950 px-4 py-2 text-xs font-bold text-white dark:bg-white dark:text-zinc-950">
+            Añadir en Inicio
+          </button>
         </Card>
+      ) : (
+        <div className="-mx-5 flex snap-x snap-mandatory gap-2.5 overflow-x-auto px-5 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {exercises.map((e) => {
+            const n = sets.filter((x) => x.ex === e.name).length;
+            const on = e.name === name;
+            return (
+              <button
+                key={e.name}
+                type="button"
+                onClick={() => setName(e.name)}
+                aria-pressed={on}
+                className={`flex w-40 shrink-0 snap-center flex-col justify-between rounded-[24px] p-3.5 text-left transition-all ${
+                  on
+                    ? 'bg-zinc-950 text-white dark:bg-white dark:text-zinc-950'
+                    : 'bg-zinc-100 text-zinc-950 hover:bg-zinc-200/80 dark:bg-zinc-900 dark:text-white dark:hover:bg-zinc-800'
+                }`}
+              >
+                <div className="flex items-center justify-between gap-1">
+                  <span className={`truncate text-[10px] font-bold uppercase tracking-wider ${on ? 'opacity-70' : muted}`}>
+                    {e.muscle}
+                  </span>
+                  {n > 0 && (
+                    <span className={`flex size-4 shrink-0 items-center justify-center rounded-full ${on ? 'bg-white text-zinc-950 dark:bg-zinc-950 dark:text-white' : 'bg-zinc-950 text-white dark:bg-white dark:text-zinc-950'}`}>
+                      <Check size={10} strokeWidth={3} />
+                    </span>
+                  )}
+                </div>
+
+                <p className="mt-1.5 truncate text-sm font-extrabold">{e.name}</p>
+
+                <div className="mt-2.5 flex items-center justify-between">
+                  <span className={`text-xs font-semibold ${on ? 'opacity-75' : muted}`}>
+                    {n} {n === 1 ? 'serie' : 'series'}
+                  </span>
+                  {/* Micro marcas tipo regla */}
+                  <div className="flex items-end gap-0.5 opacity-50" aria-hidden="true">
+                    {[3, 6, 3].map((h, idx) => (
+                      <span
+                        key={idx}
+                        className={`w-0.5 rounded-full ${on ? 'bg-white dark:bg-zinc-950' : 'bg-zinc-400 dark:bg-zinc-600'}`}
+                        style={{ height: `${h * 1.5}px` }}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
       )}
 
+      {/* Temporizador de descanso compacto */}
+      {rest > 0 && (
+        <div className="rounded-[26px] bg-zinc-950 p-4 text-white dark:bg-zinc-900 dark:ring-1 dark:ring-zinc-800">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="flex size-11 items-center justify-center rounded-2xl bg-white/10">
+                <Timer size={20} />
+              </div>
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">
+                  Descanso · {mmss(targetRest)}
+                </p>
+                <p className="text-3xl font-extrabold leading-none tracking-tight">
+                  {rest}<span className="ml-0.5 text-base font-bold text-zinc-400">s</span>
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <button type="button" onClick={() => adjustRest(-15)} aria-label="Restar 15 segundos" className="h-9 rounded-full bg-white/10 px-3 text-xs font-bold hover:bg-white/20">−15s</button>
+              <button type="button" onClick={() => adjustRest(15)} aria-label="Sumar 15 segundos" className="h-9 rounded-full bg-white/10 px-3 text-xs font-bold hover:bg-white/20">+15s</button>
+              <button type="button" onClick={() => setRest(0)} className="h-9 rounded-full bg-white px-3.5 text-xs font-extrabold text-zinc-950 hover:bg-zinc-200">Saltar</button>
+            </div>
+          </div>
+
+          <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/15">
+            <div
+              className="h-full rounded-full bg-white transition-all duration-500"
+              style={{ width: `${Math.min(100, Math.max(0, (rest / targetRest) * 100))}%` }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Tarjeta principal de registro con RepsPicker intacto */}
       <Card className="text-center">
-        <p className="text-lg font-bold">Repeticiones hechas</p>
-        {currentEx?.targetReps && <p className={`text-sm ${muted}`}>Objetivo: {currentEx.targetReps} reps {hasBase ? `(@ ${currentEx.defaultWeight} kg)` : ''}</p>}
-        {last && <p className={`text-sm ${muted}`}>Última vez: {fmt(last.kg, 1)} kg × {last.reps}</p>}
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          {currentEx?.targetReps && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-zinc-200/80 px-3 py-1 text-xs font-semibold dark:bg-zinc-800">
+              <Target size={12} className={muted} />
+              Objetivo: <b>{currentEx.targetReps}</b>{hasBase ? ` · ${currentEx.defaultWeight} kg` : ''}
+            </span>
+          )}
+          {last && (
+            <button
+              type="button"
+              onClick={() => setInput({ kg: String(last.kg), reps: String(last.reps) })}
+              title="Usar peso y repeticiones de la última vez"
+              className="inline-flex items-center gap-1 rounded-full bg-zinc-200/80 px-3 py-1 text-xs font-semibold transition-colors hover:bg-zinc-300 dark:bg-zinc-800 dark:hover:bg-zinc-700"
+            >
+              <History size={12} className={muted} />
+              Última: <b>{fmt(last.kg, 1)} kg × {last.reps}</b>
+            </button>
+          )}
+        </div>
+
+        <p className="mt-3 text-xs font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
+          Repeticiones hechas
+        </p>
+
+        {/* Deslizador táctil de repeticiones */}
         <RepsPicker value={reps} onChange={(n) => setInput((v) => ({ ...v, reps: String(n) }))} />
-        <form onSubmit={add} className="mt-5 flex items-center gap-2">
-          <input inputMode="decimal" aria-label="Kilos" placeholder={last ? `${fmt(last.kg, 1)} kg` : 'Kg'} value={input.kg} onChange={(e) => setInput((v) => ({ ...v, kg: e.target.value }))} className={`${field} w-full text-center`} />
-          <button type="submit" disabled={!name} className={`${primary} !h-11 !w-auto shrink-0 px-6 !text-sm`}>Continuar →</button>
+
+        {/* Controles de carga + botón registrar */}
+        <form onSubmit={add} className="mt-5 space-y-3">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => stepKg(-2.5)}
+              aria-label="Restar 2,5 kg"
+              className="flex h-12 shrink-0 items-center gap-0.5 rounded-2xl bg-zinc-200 px-3 text-xs font-extrabold transition-colors hover:bg-zinc-300 dark:bg-zinc-800 dark:hover:bg-zinc-700"
+            >
+              <Minus size={13} />2.5
+            </button>
+
+            <div className="relative min-w-0 flex-1">
+              <input
+                inputMode="decimal"
+                aria-label="Kilos"
+                placeholder={last ? `${fmt(last.kg, 1)}` : '0'}
+                value={input.kg}
+                onChange={(e) => setInput((v) => ({ ...v, kg: e.target.value }))}
+                className={`${field} !h-12 w-full pr-9 text-center text-lg font-extrabold`}
+              />
+              <span className={`pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-bold ${muted}`}>kg</span>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => stepKg(2.5)}
+              aria-label="Sumar 2,5 kg"
+              className="flex h-12 shrink-0 items-center gap-0.5 rounded-2xl bg-zinc-200 px-3 text-xs font-extrabold transition-colors hover:bg-zinc-300 dark:bg-zinc-800 dark:hover:bg-zinc-700"
+            >
+              <Plus size={13} />2.5
+            </button>
+          </div>
+
+          <button type="submit" disabled={!name} className={`${primary} flex !h-12 items-center justify-center gap-2 !text-sm`}>
+            <Plus size={17} strokeWidth={2.5} />
+            Registrar serie {mine.length + 1}
+          </button>
+
+          {preview1rm > 0 && (
+            <div className="flex items-center justify-center gap-2 pt-0.5 text-xs">
+              <span className={`inline-flex items-center gap-1 ${muted}`}>
+                <Zap size={12} /> 1RM est.: <b className="font-bold text-zinc-950 dark:text-white">{fmt(preview1rm, 1)} kg</b>
+              </span>
+              {willBePr && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-extrabold text-amber-600 dark:text-amber-400">
+                  <Trophy size={11} /> ¡Nuevo récord!
+                </span>
+              )}
+            </div>
+          )}
         </form>
       </Card>
 
+      {/* Series registradas del ejercicio actual */}
       {mine.length > 0 && (
         <section>
-          <h2 className="text-xl font-bold tracking-tight">Series de {name}</h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-bold tracking-tight">Series · {name}</h2>
+            <button
+              type="button"
+              onClick={() => push(mine.at(-1).kg, mine.at(-1).reps)}
+              className="inline-flex items-center gap-1.5 rounded-full bg-zinc-100 px-3.5 py-1.5 text-xs font-bold transition-colors hover:bg-zinc-200 dark:bg-zinc-900 dark:hover:bg-zinc-800"
+            >
+              <Repeat size={13} /> Repetir última
+            </button>
+          </div>
+
           <ol className="mt-3 space-y-2">
             {mine.map((x, i) => (
-              <li key={x.idx} className="flex h-14 items-center justify-between rounded-2xl bg-zinc-200 pl-5 pr-3 text-sm dark:bg-zinc-800">
-                <b>Serie {i + 1}</b>
-                <span className="flex items-center gap-2">
-                  {x.pr && <span className="inline-flex items-center gap-1 text-xs font-bold text-amber-600 dark:text-amber-400"><Trophy size={14} />Récord</span>}
-                  {fmt(x.kg, 1)} kg × {x.reps}
-                  <button type="button" onClick={() => commit(sets.filter((_, j) => j !== x.idx))} aria-label={`Quitar serie ${i + 1}`} className={trash}><X size={15} /></button>
-                </span>
+              <li key={x.idx} className="flex items-center justify-between gap-3 rounded-[22px] bg-zinc-100 p-3 pl-3.5 dark:bg-zinc-900">
+                <div className="flex items-center gap-3">
+                  <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-zinc-950 text-xs font-extrabold text-white dark:bg-white dark:text-zinc-950">
+                    {String(i + 1).padStart(2, '0')}
+                  </span>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-extrabold">
+                        {fmt(x.kg, 1)} kg <span className={`font-semibold ${muted}`}>×</span> {x.reps} reps
+                      </p>
+                      {x.pr && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-extrabold text-amber-600 dark:text-amber-400">
+                          <Trophy size={10} /> Récord
+                        </span>
+                      )}
+                    </div>
+                    <p className={`text-[11px] ${muted}`}>
+                      Volumen: {fmt(x.kg * x.reps)} kg · 1RM {fmt(e1rm(x.kg, x.reps), 1)} kg
+                    </p>
+                  </div>
+                </div>
+
+                <button type="button" onClick={() => commit(sets.filter((_, j) => j !== x.idx))} aria-label={`Quitar serie ${i + 1}`} className={trash}>
+                  <X size={15} />
+                </button>
               </li>
             ))}
           </ol>
-          <button type="button" onClick={() => push(mine.at(-1).kg, mine.at(-1).reps)} className="mt-3 inline-flex items-center gap-1.5 text-sm font-semibold"><Repeat size={15} />Repetir última serie</button>
         </section>
       )}
     </div>
   );
 }
 
+export function CalendarView({ go, activeDate, pickDate }) {
+  const { sessions } = useGym();
+  const [month, setMonth] = useState(() => { const d = new Date(`${activeDate}T00:00`); return new Date(d.getFullYear(), d.getMonth(), 1); });
+  const trained = new Set(sessions.map((x) => x.date));
+  const lead = (month.getDay() + 6) % 7;
+  const total = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
+  const cells = [...Array(lead).fill(null), ...Array.from({ length: total }, (_, i) => i + 1)];
+  const key = (d) => iso(new Date(month.getFullYear(), month.getMonth(), d));
+  const count = cells.filter((d) => d && trained.has(key(d))).length;
+  const move = (n) => setMonth(new Date(month.getFullYear(), month.getMonth() + n, 1));
+  const today = iso();
+  const picked = sessions.filter((x) => x.date === activeDate);
+  const nav = 'flex size-9 items-center justify-center rounded-full hover:bg-zinc-200 dark:hover:bg-zinc-800';
+  return (
+    <div className="space-y-4">
+      <Card>
+        <div className="flex items-center justify-between">
+          <button type="button" onClick={() => move(-1)} aria-label="Mes anterior" className={nav}><ChevronLeft size={20} /></button>
+          <div className="text-center">
+            <p className="text-lg font-bold capitalize">{new Intl.DateTimeFormat('es-ES', { month: 'long', year: 'numeric' }).format(month)}</p>
+            <p className={`text-xs ${muted}`}>{count} {count === 1 ? 'día entrenado' : 'días entrenados'}</p>
+          </div>
+          <button type="button" onClick={() => move(1)} aria-label="Mes siguiente" className={nav}><ChevronRight size={20} /></button>
+        </div>
+        <div className="mt-4 grid grid-cols-7 gap-y-1 text-center">
+          {['L', 'M', 'X', 'J', 'V', 'S', 'D'].map((d) => <span key={d} className={`text-xs font-medium ${muted}`}>{d}</span>)}
+          {cells.map((d, i) => {
+            if (!d) return <span key={`e${i}`} />;
+            const k = key(d), on = k === activeDate, did = trained.has(k);
+            return (
+              <button key={k} type="button" onClick={() => pickDate(k)} aria-pressed={on} aria-label={`${d}${did ? ', con entreno' : ''}`}
+                className={`mx-auto flex size-10 flex-col items-center justify-center rounded-full text-sm font-semibold ${on ? 'bg-zinc-950 text-white dark:bg-white dark:text-zinc-950' : k === today ? 'ring-2 ring-zinc-950 dark:ring-white' : 'hover:bg-zinc-200 dark:hover:bg-zinc-800'}`}>
+                {d}
+                <span className={`mt-0.5 size-1.5 rounded-full ${did ? (on ? 'bg-white dark:bg-zinc-950' : 'bg-zinc-950 dark:bg-white') : 'bg-transparent'}`} />
+              </button>
+            );
+          })}
+        </div>
+      </Card>
+      <section>
+        <h2 className="text-xl font-bold capitalize tracking-tight">{new Intl.DateTimeFormat('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date(`${activeDate}T00:00`))}</h2>
+        <div className="mt-3 space-y-2">
+          {picked.length === 0 && <p className={`text-sm ${muted}`}>Sin entrenos este día.</p>}
+          {picked.map((x) => (
+            <div key={x.id} className="rounded-2xl bg-zinc-200 px-5 py-3 dark:bg-zinc-800">
+              <p className="font-semibold">{x.name}</p>
+              <p className={`text-sm ${muted}`}>{x.sets.length} series · {fmt(x.sets.reduce((t, y) => t + y.kg * y.reps, 0))} kg</p>
+            </div>
+          ))}
+        </div>
+        <button type="button" onClick={() => go('entreno')} className={`${primary} mt-4 !h-12`}>Entrenar este día</button>
+      </section>
+    </div>
+  );
+}
+
+const WEEK_DAYS = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
+
 export function Progress() {
   const { sessions, goals, saveGoals, deleteSession } = useGym();
   const [ex, setEx] = useState('');
   const [editing, setEditing] = useState(false);
+
   const names = [...new Set(sessions.flatMap((s) => s.sets.map((x) => x.ex)))];
   const sel = names.includes(ex) ? ex : names[0];
   const ordered = [...sessions].sort((a, b) => a.date.localeCompare(b.date));
+
+  // Evolución del 1RM estimado del ejercicio seleccionado
   const pts = ordered
-    .map((s) => ({ date: s.date, v: Math.max(0, ...s.sets.filter((x) => x.ex === sel).map((x) => e1rm(x.kg, x.reps))) }))
+    .map((s) => ({
+      date: s.date,
+      v: Math.max(0, ...s.sets.filter((x) => x.ex === sel).map((x) => e1rm(x.kg, x.reps))),
+      maxKg: Math.max(0, ...s.sets.filter((x) => x.ex === sel).map((x) => x.kg)),
+    }))
     .filter((p) => p.v > 0);
-  const hi = Math.max(...pts.map((p) => p.v)), lo = Math.min(...pts.map((p) => p.v));
-  const line = pts.map((p, i) => `${pts.length > 1 ? 6 + i * (298 / (pts.length - 1)) : 155},${110 - ((p.v - lo) / (hi - lo || 1)) * 90}`).join(' ');
+
+  const hi = pts.length ? Math.max(...pts.map((p) => p.v)) : 0;
+  const lo = pts.length ? Math.min(...pts.map((p) => p.v)) : 0;
+  const bestKg = pts.length ? Math.max(...pts.map((p) => p.maxKg)) : 0;
+  const coords = pts.map((p, i) => ({
+    x: pts.length > 1 ? 12 + i * (286 / (pts.length - 1)) : 155,
+    y: pts.length > 1 ? 104 - ((p.v - lo) / (hi - lo || 1)) * 82 : 60,
+  }));
+  const line = coords.map((c) => `${c.x},${c.y}`).join(' ');
+  const area = coords.length > 1 ? `12,116 ${line} ${coords.at(-1).x},116` : '';
   const gain = pts.length > 1 ? ((pts.at(-1).v - pts[0].v) / pts[0].v) * 100 : 0;
+
+  // Métricas semanales e históricas
   const counts = weekSets(sessions);
   const weekly = goals.weekly || {};
   const setCap = (m, v) => {
@@ -449,94 +1052,389 @@ export function Progress() {
     if (n) next[m] = n; else delete next[m];
     saveGoals({ weekly: next });
   };
+
   const recent = [...ordered].reverse().slice(0, 8);
   const capTotal = Object.values(weekly).reduce((t, n) => t + n, 0);
   const weekPct = capTotal ? (Object.entries(weekly).reduce((t, [m, c]) => t + Math.min(counts[m] || 0, c), 0) / capTotal) * 100 : 0;
   const records = sessions.flatMap((x) => x.sets).filter((y) => y.pr).length;
+  const week = weekVol(sessions, 0), prev = weekVol(sessions, 1);
+  const delta = prev ? ((week - prev) / prev) * 100 : null;
+  const doneSets = Object.values(counts).reduce((t, n) => t + n, 0);
+
+  // Días entrenados de la semana actual (Lun - Dom)
+  const monday = new Date();
+  monday.setHours(0, 0, 0, 0);
+  monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+  const mondayIso = iso(monday);
+  const trainedDates = new Set(sessions.map((s) => s.date));
+  const weekStrip = WEEK_DAYS.map((label, i) => {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    const k = iso(d);
+    return { label, done: trainedDates.has(k), isToday: k === iso() };
+  });
+
+  // Métricas clave del carrusel tipo regla
+  const weekSessionsCount = sessions.filter((s) => s.date >= mondayIso).length;
+  const avgIntensity = doneSets > 0 ? week / doneSets : 0;
+  const totalTons = sessions.reduce((t, s) => t + s.sets.reduce((u, x) => u + x.kg * x.reps, 0), 0) / 1000;
+  const topMuscleEntry = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+
+  const rulerMetrics = [
+    { label: 'Intensidad', value: fmt(avgIntensity, 0), unit: 'kg / serie', active: avgIntensity > 0 },
+    { label: 'Sesiones', value: weekSessionsCount, unit: 'esta semana', active: weekSessionsCount > 0 },
+    { label: 'Racha', value: calcStreak(sessions), unit: 'días seguidos', active: calcStreak(sessions) > 0 },
+    { label: 'Récords', value: records, unit: 'PR totales', active: records > 0 },
+    { label: 'Músculo top', value: topMuscleEntry ? topMuscleEntry[1] : 0, unit: topMuscleEntry ? topMuscleEntry[0] : 'sin datos', active: !!topMuscleEntry },
+    { label: 'Acumulado', value: fmt(totalTons, 1), unit: 'toneladas', active: totalTons > 0 },
+  ];
+
+  const lastOf = (n) => {
+    const x = [...ordered].reverse().find((z) => z.sets.some((y) => y.ex === n));
+    return x ? Math.max(...x.sets.filter((y) => y.ex === n).map((y) => e1rm(y.kg, y.reps))) : 0;
+  };
+
+  const hasCaps = Object.keys(weekly).length > 0;
+  const muscleEntries = hasCaps
+    ? Object.entries(weekly)
+    : Object.entries(counts).sort((a, b) => b[1] - a[1]);
 
   return (
-    <div className="space-y-3">
-      <Card>
-        <p className="text-center text-xl font-bold">Esta semana</p>
-        <div className="mt-4">
-          <Ring value={weekPct} size={190}>
-            <span className="text-5xl font-extrabold">{Math.round(weekPct)}%</span>
-            <span className={`text-xs ${muted}`}>de tus topes</span>
-          </Ring>
+    <div className="space-y-5">
+      {/* Resumen semanal moderno */}
+      <Card className="relative overflow-hidden">
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <p className={`text-xs font-semibold uppercase tracking-wider ${muted}`}>Volumen semanal</p>
+            <div className="mt-1 flex items-baseline gap-2">
+              <span className="text-4xl font-extrabold tracking-tight">{fmt(week)}</span>
+              <span className={`text-sm font-bold ${muted}`}>kg</span>
+            </div>
+          </div>
+          {delta !== null && (
+            <span className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-bold ${delta < 0 ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400' : 'bg-zinc-950 text-white dark:bg-white dark:text-zinc-950'}`}>
+              <TrendingUp size={13} className={delta < 0 ? 'rotate-180' : ''} />
+              {delta < 0 ? '−' : '+'}{fmt(Math.abs(delta), 0)}%
+            </span>
+          )}
+        </div>
+
+        {/* Tira de constancia semanal L-D */}
+        <div className="mt-5 grid grid-cols-7 gap-1.5">
+          {weekStrip.map((d, i) => (
+            <div key={i} className="flex flex-col items-center gap-1.5">
+              <div className={`flex h-9 w-full items-center justify-center rounded-xl text-xs font-extrabold transition-all ${
+                d.done
+                  ? 'bg-zinc-950 text-white dark:bg-white dark:text-zinc-950'
+                  : d.isToday
+                    ? 'border border-dashed border-zinc-400 text-zinc-950 dark:border-zinc-500 dark:text-white'
+                    : 'bg-zinc-200/80 text-zinc-400 dark:bg-zinc-800/80 dark:text-zinc-500'
+              }`}>
+                {d.done ? <Check size={14} strokeWidth={3} /> : d.label}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Barra de objetivo de series */}
+        <div className="mt-5 border-t border-zinc-200 pt-4 dark:border-zinc-800">
+          <div className="mb-2 flex items-center justify-between text-xs">
+            <span className={`font-medium ${muted}`}>
+              {capTotal ? `Objetivo semanal · ${Math.round(weekPct)}%` : 'Series esta semana'}
+            </span>
+            <b className="font-bold">{doneSets}{capTotal ? ` / ${capTotal} series` : ' series'}</b>
+          </div>
+          <Bar value={capTotal ? weekPct : Math.min(100, doneSets * 4)} />
         </div>
       </Card>
-      <div className="grid grid-cols-2 gap-3">
-        <Card className="!rounded-3xl !bg-zinc-700 !p-4 text-white dark:!bg-zinc-800"><p className="text-sm text-zinc-300">Series</p><p className="mt-2 text-2xl font-extrabold">{Object.values(counts).reduce((t, n) => t + n, 0)}</p><p className="text-xs text-zinc-300">esta semana</p></Card>
-        <Card className="!rounded-3xl !bg-zinc-700 !p-4 text-white dark:!bg-zinc-800"><p className="text-sm text-zinc-300">Récords</p><p className="mt-2 text-2xl font-extrabold">{records}</p><p className="text-xs text-zinc-300">en total</p></Card>
-      </div>
-      <Card>
-        {pts.length === 0 ? (
-          <p className={`text-sm ${muted}`}>Aún no hay entrenos. Termina uno para ver tu evolución.</p>
+
+      {/* Regla deslizable de métricas inspirada en el RepsPicker */}
+      <section>
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-bold tracking-tight">Métricas clave</h2>
+          <span className={`text-xs ${muted}`}>Desliza →</span>
+        </div>
+        <div className="-mx-5 mt-3 flex snap-x snap-mandatory gap-3 overflow-x-auto px-5 pb-2 [mask-image:linear-gradient(to_right,transparent,black_6%,black_94%,transparent)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {rulerMetrics.map((m) => (
+            <div key={m.label} className="flex w-36 shrink-0 snap-center flex-col justify-between rounded-[26px] bg-zinc-100 p-4 dark:bg-zinc-900">
+              <span className={`text-[11px] font-semibold uppercase tracking-wider ${muted}`}>{m.label}</span>
+              <div className="my-3">
+                <p className="text-4xl font-extrabold leading-none tracking-tight">{m.value}</p>
+                <p className={`mt-1 truncate text-xs font-medium ${muted}`}>{m.unit}</p>
+              </div>
+              <div className="flex items-end justify-between pt-1 opacity-40" aria-hidden="true">
+                {[4, 7, 4, 10, 4, 7, 4].map((h, idx) => (
+                  <span
+                    key={idx}
+                    className={`w-0.5 rounded-full ${m.active && idx === 3 ? 'bg-zinc-950 opacity-100 dark:bg-white' : 'bg-zinc-400 dark:bg-zinc-600'}`}
+                    style={{ height: `${h * 1.6}px` }}
+                  />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Evolución por ejercicio */}
+      <section>
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-bold tracking-tight">Fuerza · 1RM</h2>
+          {pts.length > 0 && (
+            <span className={`inline-flex items-center gap-1 text-xs font-semibold ${muted}`}>
+              <Zap size={13} /> Máx. {fmt(bestKg, 1)} kg
+            </span>
+          )}
+        </div>
+
+        {names.length === 0 ? (
+          <p className={`mt-3 text-sm ${muted}`}>Aún no hay entrenos. Termina uno para ver tu evolución.</p>
         ) : (
           <>
-            <label htmlFor="pex" className={`text-sm font-medium ${muted}`}>1RM estimado</label>
-            <select id="pex" value={sel} onChange={(e) => setEx(e.target.value)} className={`${field} mt-2 w-full`}>{names.map((n) => <option key={n}>{n}</option>)}</select>
-            <p className={`mt-3 text-3xl font-extrabold tracking-tight ${good}`}>{fmt(pts.at(-1).v, 1)} kg</p>
-            <p className={`text-sm font-semibold ${gain < 0 ? bad : good}`}>{gain < 0 ? '−' : '+'}{fmt(Math.abs(gain), 1)} % desde el primer entreno</p>
-            <svg viewBox="0 0 310 120" className="mt-3 w-full text-zinc-950 dark:text-white" role="img" aria-label={`Evolución del 1RM estimado de ${sel}`}>
-              <polyline points={line} fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            <div className={`flex justify-between text-xs ${muted}`}><span>{shortDate(pts[0].date)}</span><span>{shortDate(pts.at(-1).date)}</span></div>
+            <div className="-mx-5 mt-3 flex snap-x snap-mandatory gap-2.5 overflow-x-auto px-5 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {names.map((n) => {
+                const on = n === sel;
+                return (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => setEx(n)}
+                    aria-pressed={on}
+                    className={`shrink-0 snap-center rounded-3xl p-4 text-left transition-all ${
+                      on
+                        ? 'w-44 bg-zinc-950 text-white dark:bg-white dark:text-zinc-950'
+                        : 'w-32 bg-zinc-200/80 dark:bg-zinc-900'
+                    }`}
+                  >
+                    <p className="truncate text-xs font-semibold opacity-80">{n}</p>
+                    <p className={`mt-2.5 font-extrabold leading-none tracking-tight ${on ? 'text-4xl' : 'text-3xl'}`}>
+                      {fmt(lastOf(n))}
+                    </p>
+                    <div className="mt-2 flex items-center justify-between">
+                      <span className="text-[11px] opacity-60">kg · 1RM</span>
+                      <span className={`h-1.5 w-5 rounded-full ${on ? 'bg-white dark:bg-zinc-950' : 'bg-zinc-400/40'}`} />
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            {pts.length > 0 && (
+              <Card className="mt-3">
+                <div className="flex items-baseline justify-between">
+                  <div>
+                    <p className={`text-xs font-medium ${muted}`}>Progreso en {sel}</p>
+                    <p className={`mt-0.5 text-lg font-extrabold ${gain < 0 ? bad : ''}`}>
+                      {gain < 0 ? '−' : '+'}{fmt(Math.abs(gain), 1)}%
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className={`text-xs ${muted}`}>Récord 1RM</p>
+                    <p className="text-sm font-extrabold">{fmt(hi, 1)} kg</p>
+                  </div>
+                </div>
+
+                <svg viewBox="0 0 310 124" className="mt-3 w-full text-zinc-950 dark:text-white" role="img" aria-label={`Evolución del 1RM estimado de ${sel}`}>
+                  <defs>
+                    <linearGradient id="rmGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="currentColor" stopOpacity="0.22" />
+                      <stop offset="100%" stopColor="currentColor" stopOpacity="0" />
+                    </linearGradient>
+                  </defs>
+                  <line x1="12" y1="22" x2="298" y2="22" stroke="currentColor" strokeOpacity="0.08" strokeDasharray="4 4" />
+                  <line x1="12" y1="104" x2="298" y2="104" stroke="currentColor" strokeOpacity="0.08" strokeDasharray="4 4" />
+                  {area && <polygon points={area} fill="url(#rmGrad)" />}
+                  {coords.length > 1 && (
+                    <polyline points={line} fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                  )}
+                  {coords.map((c, idx) => (
+                    <circle
+                      key={idx}
+                      cx={c.x}
+                      cy={c.y}
+                      r={idx === coords.length - 1 ? 5 : 3}
+                      className={idx === coords.length - 1 ? 'fill-zinc-950 dark:fill-white' : 'fill-zinc-400 dark:fill-zinc-500'}
+                    />
+                  ))}
+                </svg>
+
+                <div className={`mt-1 flex justify-between text-xs ${muted}`}>
+                  <span>{shortDate(pts[0].date)}</span>
+                  <span>{pts.length} {pts.length === 1 ? 'sesión' : 'sesiones'}</span>
+                  <span>{shortDate(pts.at(-1).date)}</span>
+                </div>
+              </Card>
+            )}
           </>
         )}
-      </Card>
+      </section>
 
-      <Card>
-        <div className="flex items-start justify-between">
+      {/* Volumen por músculo rediseñado */}
+      <section>
+        <div className="flex items-center justify-between">
           <div>
-            <p className="font-bold">Series por músculo</p>
-            <p className={`text-sm ${muted}`}>Esta semana · tope de series</p>
+            <h2 className="text-xl font-bold tracking-tight">Volumen por músculo</h2>
+            <p className={`text-xs ${muted}`}>{hasCaps ? 'Series semanales vs. tope fijado' : 'Distribución semanal de series'}</p>
           </div>
-          <button type="button" onClick={() => setEditing((v) => !v)} aria-label="Editar topes" aria-pressed={editing} className="flex size-8 items-center justify-center rounded-full hover:bg-zinc-200 dark:hover:bg-zinc-800">{editing ? <X size={16} /> : <Pencil size={16} />}</button>
+          <button
+            type="button"
+            onClick={() => setEditing((v) => !v)}
+            aria-label="Editar topes"
+            aria-pressed={editing}
+            className={`flex size-9 items-center justify-center rounded-full transition-colors ${editing ? 'bg-zinc-950 text-white dark:bg-white dark:text-zinc-950' : 'bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-900 dark:hover:bg-zinc-800'}`}
+          >
+            {editing ? <X size={16} /> : <Pencil size={16} />}
+          </button>
         </div>
-        {editing ? (
-          <div className="mt-4 grid grid-cols-2 gap-2">
-            {MUSCLES.map((m) => (
-              <label key={m} className={`text-xs font-medium ${muted}`}>{m} (0 = sin tope)
-                <input inputMode="numeric" value={weekly[m] ?? ''} onChange={(e) => setCap(m, e.target.value)} className={`${field} mt-1 w-full`} />
-              </label>
-            ))}
-          </div>
-        ) : Object.keys(weekly).length === 0 ? (
-          <p className={`mt-3 text-sm ${muted}`}>No hay topes. Pulsa el lápiz para fijar uno por músculo.</p>
-        ) : Object.entries(weekly).map(([m, cap]) => {
-          const n = counts[m] || 0, pct = (n / cap) * 100;
-          return (
-            <div key={m} className="mt-4">
-              <div className="mb-2 flex justify-between text-sm"><b>{m}</b><span className={n > cap ? `font-semibold ${bad}` : muted}>{n} / {cap}{n > cap ? ' · Superado' : ''}</span></div>
-              <Bar value={pct} color={pct >= 100 ? 'bg-rose-500' : pct >= 80 ? 'bg-zinc-500' : 'bg-zinc-2000'} />
-            </div>
-          );
-        })}
-      </Card>
 
-      {recent.length > 0 && (
-        <Card className="!py-2">
-          <p className="py-3 font-bold">Historial</p>
-          {recent.map((x) => {
-            const vol = x.sets.reduce((t, y) => t + y.kg * y.reps, 0), prs = x.sets.filter((y) => y.pr).length;
-            return (
-              <div key={x.id} className="flex items-center justify-between gap-3 border-b border-zinc-300 py-3 last:border-0 dark:border-zinc-700">
-                <div className="min-w-0">
-                  <p className="font-bold">{x.name}</p>
-                  <p className={`text-sm ${muted}`}>{shortDate(x.date)} · {x.sets.length} series · {fmt(vol)} kg{prs > 0 ? ` · ${prs} ${prs === 1 ? 'récord' : 'récords'}` : ''}</p>
+        {editing ? (
+          <Card className="mt-3">
+            <p className={`mb-3 text-xs font-medium ${muted}`}>Fija tu tope de series por semana (0 = sin tope)</p>
+            <div className="grid grid-cols-2 gap-2.5">
+              {MUSCLES.map((m) => (
+                <label key={m} className="rounded-2xl bg-zinc-200/70 p-3 text-xs font-semibold dark:bg-zinc-800/70">
+                  <span className={`block ${muted}`}>{m}</span>
+                  <input
+                    inputMode="numeric"
+                    placeholder="Sin tope"
+                    value={weekly[m] ?? ''}
+                    onChange={(e) => setCap(m, e.target.value)}
+                    className="mt-1 w-full bg-transparent text-lg font-extrabold text-zinc-950 outline-none dark:text-white"
+                  />
+                </label>
+              ))}
+            </div>
+          </Card>
+        ) : muscleEntries.length === 0 ? (
+          <Card className="mt-3 text-center">
+            <Dumbbell size={20} className={`mx-auto ${muted}`} />
+            <p className={`mt-2 text-sm ${muted}`}>Sin series registradas esta semana. Pulsa el lápiz para fijar tus topes.</p>
+          </Card>
+        ) : (
+          <div className="mt-3 grid grid-cols-2 gap-2.5">
+            {muscleEntries.map(([m, val]) => {
+              const n = counts[m] || 0;
+              const cap = hasCaps ? val : Math.max(12, ...Object.values(counts));
+              const ratio = Math.min(1, n / cap);
+              const over = hasCaps && n > cap;
+              const complete = hasCaps && n >= cap;
+              const segs = 8;
+              const filled = Math.round(ratio * segs);
+
+              return (
+                <div key={m} className="flex flex-col justify-between rounded-[24px] bg-zinc-100 p-4 dark:bg-zinc-900">
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="truncate text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{m}</span>
+                    {over ? (
+                      <span className="rounded-full bg-rose-500/15 px-2 py-0.5 text-[10px] font-extrabold text-rose-600 dark:text-rose-400">+{n - cap}</span>
+                    ) : complete ? (
+                      <span className="flex size-4 items-center justify-center rounded-full bg-zinc-950 text-white dark:bg-white dark:text-zinc-950"><Check size={10} strokeWidth={3} /></span>
+                    ) : null}
+                  </div>
+
+                  <div className="my-2.5 flex items-baseline gap-1">
+                    <span className={`text-3xl font-extrabold leading-none tracking-tight ${over ? bad : ''}`}>{n}</span>
+                    <span className={`text-xs font-semibold ${muted}`}>
+                      {hasCaps ? `/ ${cap} ser.` : n === 1 ? 'serie' : 'series'}
+                    </span>
+                  </div>
+
+                  {/* Barra segmentada estilo marcador táctil */}
+                  <div className="grid grid-cols-8 gap-1 pt-1" aria-hidden="true">
+                    {Array.from({ length: segs }, (_, idx) => (
+                      <span
+                        key={idx}
+                        className={`h-1.5 rounded-full transition-all ${
+                          idx < filled
+                            ? over
+                              ? 'bg-rose-500'
+                              : 'bg-zinc-950 dark:bg-white'
+                            : 'bg-zinc-300/80 dark:bg-zinc-800'
+                        }`}
+                      />
+                    ))}
+                  </div>
                 </div>
-                <button type="button" onClick={() => { if (window.confirm('¿Eliminar este entreno?')) deleteSession(x.id); }} aria-label={`Eliminar entreno del ${shortDate(x.date)}`} className={trash}><Trash2 size={15} /></button>
-              </div>
-            );
-          })}
-        </Card>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      {/* Historial reciente rediseñado */}
+      {recent.length > 0 && (
+        <section>
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-bold tracking-tight">Historial reciente</h2>
+            <span className="rounded-full bg-zinc-100 px-3 py-1 text-xs font-bold dark:bg-zinc-900">
+              {sessions.length} {sessions.length === 1 ? 'entreno' : 'entrenos'}
+            </span>
+          </div>
+
+          <div className="mt-3 space-y-2.5">
+            {recent.map((x) => {
+              const vol = x.sets.reduce((t, y) => t + y.kg * y.reps, 0);
+              const prs = x.sets.filter((y) => y.pr).length;
+              const exCount = new Set(x.sets.map((y) => y.ex)).size;
+              const { day, month } = dayParts(x.date);
+
+              return (
+                <div key={x.id} className="flex items-center gap-3.5 rounded-[24px] bg-zinc-100 p-3.5 dark:bg-zinc-900">
+                  {/* Insignia de fecha tipo calendario */}
+                  <div className="flex size-12 shrink-0 flex-col items-center justify-center rounded-2xl bg-zinc-950 text-white dark:bg-white dark:text-zinc-950">
+                    <span className="text-base font-extrabold leading-none">{day}</span>
+                    <span className="mt-0.5 text-[10px] font-bold uppercase tracking-wider opacity-75">{month}</span>
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <p className="truncate font-bold">{x.name}</p>
+                      {prs > 0 && (
+                        <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-extrabold text-amber-600 dark:text-amber-400">
+                          <Flame size={10} />{prs} PR
+                        </span>
+                      )}
+                    </div>
+                    <div className={`mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs ${muted}`}>
+                      <span>{exCount} {exCount === 1 ? 'ej.' : 'ejs.'}</span>
+                      <span>·</span>
+                      <span>{x.sets.length} series</span>
+                      <span>·</span>
+                      <b className="font-semibold text-zinc-700 dark:text-zinc-300">{fmt(vol)} kg</b>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => { if (window.confirm('¿Eliminar este entreno?')) deleteSession(x.id); }}
+                    aria-label={`Eliminar entreno del ${shortDate(x.date)}`}
+                    className={trash}
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </section>
       )}
     </div>
   );
 }
 
-const macros = [['Proteína', 'p', 'bg-zinc-950 dark:bg-white'], ['Carbohidratos', 'c', 'bg-zinc-600 dark:bg-zinc-300'], ['Grasas', 'g', 'bg-zinc-400 dark:bg-zinc-500']];
+const MEAL_TYPES = [
+  ['Desayuno', Coffee],
+  ['Comida', Sun],
+  ['Merienda', Cookie],
+  ['Cena', Moon],
+];
+const mealIcon = (type) => MEAL_TYPES.find(([t]) => t === type)?.[1] || Utensils;
+
+const macros = [
+  ['Proteína', 'p', Beef, 'bg-zinc-950 dark:bg-white'],
+  ['Carbos', 'c', Wheat, 'bg-zinc-600 dark:bg-zinc-300'],
+  ['Grasas', 'g', Droplets, 'bg-zinc-400 dark:bg-zinc-500'],
+];
 const blank = { type: 'Desayuno', name: '', kcal: '', p: '', c: '', g: '' };
 const blankRecipe = { ...blank, desc: '' };
 
@@ -546,12 +1444,12 @@ export function Diet({ activeDate }) {
   const [editing, setEditing] = useState(false);
   const myGoals = goals;
   const [g, setG] = useState(myGoals);
-  
+
   useEffect(() => setG(myGoals), [goals]);
 
   const [editingRecipes, setEditingRecipes] = useState(false);
   const [recipeForm, setRecipeForm] = useState({ id: '', ...blankRecipe });
-  
+
   const currentDate = activeDate || iso();
   const [craving, setCraving] = useState('');
   useEffect(() => setCraving(cravings[currentDate] || ''), [currentDate, cravings]);
@@ -567,7 +1465,7 @@ export function Diet({ activeDate }) {
   const tot = list.reduce((t, m) => ({ kcal: t.kcal + m.kcal, p: t.p + m.p, c: t.c + m.c, g: t.g + m.g }), { kcal: 0, p: 0, c: 0, g: 0 });
   const set = (k) => (e) => setF((v) => ({ ...v, [k]: e.target.value }));
   const setR = (k) => (e) => setRecipeForm((v) => ({ ...v, [k]: e.target.value }));
-  
+
   const submitGoals = (event) => {
     event.preventDefault();
     const next = Object.fromEntries(['kcal', 'p', 'c', 'g'].map((k) => [k, Number(g[k])]));
@@ -575,7 +1473,7 @@ export function Diet({ activeDate }) {
     saveGoals(next);
     setEditing(false);
   };
-  
+
   const submit = (event) => {
     event.preventDefault();
     if (!f.name.trim() || !(Number(f.kcal) >= 0) || f.kcal === '') return;
@@ -596,84 +1494,209 @@ export function Diet({ activeDate }) {
       kcal: Number(recipeForm.kcal),
       p: Number(recipeForm.p) || 0,
       c: Number(recipeForm.c) || 0,
-      g: Number(recipeForm.g) || 0
+      g: Number(recipeForm.g) || 0,
     };
-    if (recipeForm.id) saveRecipes(recipes.map(r => r.id === recipeForm.id ? newR : r));
+    if (recipeForm.id) saveRecipes(recipes.map((r) => (r.id === recipeForm.id ? newR : r)));
     else saveRecipes([...recipes, newR]);
     setRecipeForm({ id: '', ...blankRecipe, type: recipeForm.type });
   };
 
-  const deleteRecipe = (id) => saveRecipes(recipes.filter(r => r.id !== id));
+  const deleteRecipe = (id) => saveRecipes(recipes.filter((r) => r.id !== id));
   const editRecipe = (r) => setRecipeForm({ ...r, desc: r.desc || '' });
-  
+
+  const remainingKcal = myGoals.kcal - tot.kcal;
+  const overKcal = remainingKcal < 0;
+
   return (
-    <div className="space-y-3">
-      <Card>
-        <p className={`text-sm font-medium ${muted}`}>Lo que me apetece comer</p>
-        <form onSubmit={submitCraving} className="mt-3 flex gap-2">
-          <input aria-label="Qué te apetece comer" placeholder="Ej. pollo con arroz" value={craving} maxLength={80} onChange={(e) => setCraving(e.target.value)} className={`${field} w-full min-w-0`} />
-          <button type="submit" aria-label="Guardar lo que me apetece" className="flex size-11 shrink-0 items-center justify-center rounded-full bg-zinc-950 dark:bg-white dark:text-zinc-950 text-white"><Check size={18} /></button>
+    <div className="space-y-4">
+      {/* Antojo / Nota rápida del día */}
+      <Card className="!p-4">
+        <div className="flex items-center gap-2">
+          <span className="flex size-7 items-center justify-center rounded-full bg-zinc-200 text-zinc-950 dark:bg-zinc-800 dark:text-white">
+            <Sparkles size={14} />
+          </span>
+          <p className={`text-xs font-semibold uppercase tracking-wider ${muted}`}>Lo que me apetece hoy</p>
+        </div>
+        <form onSubmit={submitCraving} className="mt-2.5 flex gap-2">
+          <input aria-label="Qué te apetece comer" placeholder="Ej. pollo con arroz, tortitas..." value={craving} maxLength={80} onChange={(e) => setCraving(e.target.value)} className={`${field} w-full min-w-0`} />
+          <button type="submit" aria-label="Guardar lo que me apetece" className="flex size-11 shrink-0 items-center justify-center rounded-full bg-zinc-950 text-white dark:bg-white dark:text-zinc-950"><Check size={18} /></button>
         </form>
       </Card>
+
+      {/* Hero Bento de Calorías y Macros */}
       <Card>
-        <div className={`flex items-center justify-between text-sm font-medium ${muted}`}><span>Calorías del día</span><span className="flex items-center gap-1"><button type="button" onClick={() => { setG(myGoals); setEditing((v) => !v); }} aria-label="Editar objetivo" aria-pressed={editing} className="flex size-8 items-center justify-center rounded-full hover:bg-zinc-200 dark:hover:bg-zinc-800">{editing ? <X size={16} /> : <Pencil size={16} />}</button><Utensils size={18} /></span></div>
-        <p className="mt-3 text-3xl font-extrabold tracking-tight">{fmt(tot.kcal)} kcal</p>
-        <p className={`mb-4 mt-1 text-sm ${muted}`}>de {fmt(myGoals.kcal)} · te quedan {fmt(Math.max(0, myGoals.kcal - tot.kcal))}</p>
-        <Ring value={(tot.kcal / myGoals.kcal) * 100} size={170}><span className="text-4xl font-extrabold">{fmt(tot.kcal)}</span><span className={`text-xs ${muted}`}>kcal</span></Ring>
-        <div className="mt-4 space-y-3">
-          {macros.map(([label, k, color]) => (
-            <div key={k}>
-              <div className="mb-1.5 flex justify-between text-sm"><span>{label}</span><b>{fmt(tot[k])} / {fmt(myGoals[k])} g</b></div>
-              <Bar value={(tot[k] / myGoals[k]) * 100} color={color} />
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="flex size-8 items-center justify-center rounded-full bg-zinc-950 text-white dark:bg-white dark:text-zinc-950">
+              <Flame size={16} />
+            </span>
+            <div>
+              <p className="text-sm font-bold leading-none">Balance diario</p>
+              <p className={`mt-1 text-xs ${muted}`}>Objetivo {fmt(myGoals.kcal)} kcal</p>
             </div>
-          ))}
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className={`rounded-full px-2.5 py-1 text-xs font-extrabold ${overKcal ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400' : 'bg-zinc-200 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200'}`}>
+              {overKcal ? `+${fmt(Math.abs(remainingKcal))} kcal` : `Quedan ${fmt(remainingKcal)}`}
+            </span>
+            <button
+              type="button"
+              onClick={() => { setG(myGoals); setEditing((v) => !v); }}
+              aria-label="Editar objetivo"
+              aria-pressed={editing}
+              className={`flex size-8 items-center justify-center rounded-full transition-colors ${editing ? 'bg-zinc-950 text-white dark:bg-white dark:text-zinc-950' : 'hover:bg-zinc-200 dark:hover:bg-zinc-800'}`}
+            >
+              {editing ? <X size={15} /> : <Pencil size={15} />}
+            </button>
+          </div>
         </div>
+
+        {/* Anillo compacto + Macros con iconos */}
+        <div className="mt-5 flex items-center gap-4">
+          <div className="shrink-0">
+            <Ring value={(tot.kcal / myGoals.kcal) * 100} size={132} stroke={13}>
+              <span className="text-2xl font-extrabold leading-none tracking-tight">{fmt(tot.kcal)}</span>
+              <span className={`mt-1 text-[11px] font-semibold ${muted}`}>kcal</span>
+            </Ring>
+          </div>
+
+          <div className="min-w-0 flex-1 space-y-3">
+            {macros.map(([label, k, Icon, color]) => (
+              <div key={k}>
+                <div className="mb-1 flex items-center justify-between text-xs">
+                  <span className="inline-flex items-center gap-1.5 font-semibold">
+                    <Icon size={13} className={muted} />
+                    {label}
+                  </span>
+                  <span className={muted}>
+                    <b className="font-bold text-zinc-950 dark:text-white">{fmt(tot[k])}</b>/{fmt(myGoals[k])}g
+                  </span>
+                </div>
+                <Bar value={(tot[k] / myGoals[k]) * 100} color={color} />
+              </div>
+            ))}
+          </div>
+        </div>
+
         {editing && (
-          <form onSubmit={submitGoals} className="mt-4 grid grid-cols-2 gap-2 border-t border-zinc-300 pt-4 dark:border-zinc-700">
-            {[['kcal', 'Calorías (kcal)'], ['p', 'Proteína (g)'], ['c', 'Carbohidratos (g)'], ['g', 'Grasas (g)']].map(([k, label]) => (
-              <label key={k} className={`text-xs font-medium ${muted}`}>{label}
-                <input inputMode="numeric" value={g[k]} onChange={(e) => setG((v) => ({ ...v, [k]: e.target.value }))} className={`${field} mt-1 w-full`} />
+          <form onSubmit={submitGoals} className="mt-5 grid grid-cols-2 gap-2.5 border-t border-zinc-200 pt-4 dark:border-zinc-800">
+            {[
+              ['kcal', 'Calorías (kcal)', Flame],
+              ['p', 'Proteína (g)', Beef],
+              ['c', 'Carbos (g)', Wheat],
+              ['g', 'Grasas (g)', Droplets],
+            ].map(([k, label, Icon]) => (
+              <label key={k} className="rounded-2xl bg-zinc-200/70 p-2.5 text-xs font-semibold dark:bg-zinc-800/70">
+                <span className={`flex items-center gap-1 ${muted}`}>
+                  <Icon size={12} /> {label}
+                </span>
+                <input inputMode="numeric" value={g[k]} onChange={(e) => setG((v) => ({ ...v, [k]: e.target.value }))} className="mt-1 w-full bg-transparent text-base font-extrabold text-zinc-950 outline-none dark:text-white" />
               </label>
             ))}
-            <button type="submit" className={`${primary} col-span-2 !h-12`}>Guardar objetivo</button>
+            <button type="submit" className={`${primary} col-span-2 mt-1 !h-11 !text-sm`}>Guardar objetivo</button>
           </form>
         )}
       </Card>
-      
-      <Card className="!py-2">
-        {list.length === 0 && (
-          <div className="py-3 text-sm">
-            <p className={muted}>Todavía no has añadido comidas en este día.</p>
-            {yesterday.length > 0 && <button type="button" onClick={copyYesterday} className="mt-2 font-semibold text-zinc-950 dark:text-white">Copiar las {yesterday.length} comidas del día anterior</button>}
-          </div>
-        )}
-        {list.map((m) => (
-          <div key={m.id} className="flex items-center justify-between gap-3 border-b border-zinc-300 py-3 last:border-0 dark:border-zinc-700">
-            <div className="min-w-0"><p className="font-bold">{m.type}</p><p className={`truncate text-sm ${muted}`}>{m.name}</p></div>
-            <div className="flex shrink-0 items-center gap-2">
-              <b className="text-sm">{fmt(m.kcal)} kcal</b>
-              <button type="button" onClick={() => deleteMeal(m.id)} aria-label={`Eliminar ${m.name}`} className="flex size-8 items-center justify-center rounded-full text-slate-400 hover:bg-rose-50 hover:text-rose-700 dark:hover:bg-rose-500/10 dark:hover:text-rose-300"><Trash2 size={15} /></button>
-            </div>
-          </div>
-        ))}
-      </Card>
 
+      {/* Registro de comidas del día */}
+      <section>
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-bold tracking-tight">Comidas de hoy</h2>
+          <span className={`text-xs font-semibold ${muted}`}>
+            {list.length} {list.length === 1 ? 'registro' : 'registros'}
+          </span>
+        </div>
+
+        <div className="mt-3 space-y-2">
+          {list.length === 0 ? (
+            <Card className="text-center">
+              <Utensils size={20} className={`mx-auto ${muted}`} />
+              <p className={`mt-2 text-sm ${muted}`}>Todavía no has registrado comidas en este día.</p>
+              {yesterday.length > 0 && (
+                <button
+                  type="button"
+                  onClick={copyYesterday}
+                  className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-zinc-950 px-4 py-2 text-xs font-bold text-white dark:bg-white dark:text-zinc-950"
+                >
+                  <Copy size={13} /> Copiar las {yesterday.length} del día anterior
+                </button>
+              )}
+            </Card>
+          ) : (
+            list.map((m) => {
+              const Icon = mealIcon(m.type);
+              return (
+                <div key={m.id} className="flex items-center gap-3 rounded-[24px] bg-zinc-100 p-3.5 dark:bg-zinc-900">
+                  <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-zinc-200/80 text-zinc-950 dark:bg-zinc-800 dark:text-white">
+                    <Icon size={18} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className={`text-[11px] font-bold uppercase tracking-wider ${muted}`}>{m.type}</span>
+                      {(m.p > 0 || m.c > 0 || m.g > 0) && (
+                        <span className={`text-[11px] ${muted}`}>· {m.p}P · {m.c}C · {m.g}G</span>
+                      )}
+                    </div>
+                    <p className="truncate font-bold">{m.name}</p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    <span className="rounded-full bg-zinc-200/80 px-2.5 py-1 text-xs font-extrabold dark:bg-zinc-800">
+                      {fmt(m.kcal)} kcal
+                    </span>
+                    <button type="button" onClick={() => deleteMeal(m.id)} aria-label={`Eliminar ${m.name}`} className={trash}>
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </section>
+
+      {/* Añadir comida o gestionar recetas */}
       <Card>
-        <div className="flex items-center justify-between font-bold">
-          <p>{editingRecipes ? 'Gestionar recetas' : 'Añadir comida'}</p>
-          <button type="button" onClick={() => { setEditingRecipes(!editingRecipes); setRecipeForm({ id: '', ...blankRecipe }); }} aria-label="Gestionar recetas" className="flex size-8 items-center justify-center rounded-full hover:bg-zinc-200 dark:hover:bg-zinc-800">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="flex size-8 items-center justify-center rounded-full bg-zinc-200 text-zinc-950 dark:bg-zinc-800 dark:text-white">
+              {editingRecipes ? <Pencil size={15} /> : <Plus size={16} />}
+            </span>
+            <p className="font-bold">{editingRecipes ? 'Gestionar recetas' : 'Añadir comida'}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => { setEditingRecipes(!editingRecipes); setRecipeForm({ id: '', ...blankRecipe }); }}
+            aria-label="Gestionar recetas"
+            className={`flex size-8 items-center justify-center rounded-full transition-colors ${editingRecipes ? 'bg-zinc-950 text-white dark:bg-white dark:text-zinc-950' : 'hover:bg-zinc-200 dark:hover:bg-zinc-800'}`}
+          >
             {editingRecipes ? <X size={16} /> : <Pencil size={16} />}
           </button>
         </div>
 
         {editingRecipes ? (
           <div className="mt-4 space-y-4">
-            <form onSubmit={submitRecipe} className="space-y-3 rounded-2xl bg-zinc-200/60 p-3 dark:bg-zinc-800/50">
-              <p className="text-sm font-semibold">{recipeForm.id ? 'Editando sugerencia' : 'Nueva receta'}</p>
-              <div className="flex gap-2">
-                <select aria-label="Tipo" value={recipeForm.type} onChange={setR('type')} className={`${field} shrink-0`}>{['Desayuno', 'Comida', 'Merienda', 'Cena'].map((t) => <option key={t}>{t}</option>)}</select>
-                <input aria-label="Nombre" placeholder="Nombre" value={recipeForm.name} onChange={setR('name')} className={`${field} w-full min-w-0 bg-white dark:bg-zinc-900`} />
+            <form onSubmit={submitRecipe} className="space-y-3 rounded-2xl bg-zinc-200/60 p-3.5 dark:bg-zinc-800/50">
+              <p className="text-xs font-bold uppercase tracking-wider">{recipeForm.id ? 'Editando receta' : 'Nueva receta rápida'}</p>
+
+              {/* Selector táctil de franja horaria */}
+              <div className="grid grid-cols-4 gap-1.5">
+                {MEAL_TYPES.map(([t, Icon]) => {
+                  const on = recipeForm.type === t;
+                  return (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => setRecipeForm((v) => ({ ...v, type: t }))}
+                      className={`flex flex-col items-center gap-1 rounded-2xl py-2 text-[11px] font-bold transition-colors ${on ? 'bg-zinc-950 text-white dark:bg-white dark:text-zinc-950' : 'bg-white text-zinc-600 dark:bg-zinc-900 dark:text-zinc-300'}`}
+                    >
+                      <Icon size={14} />
+                      {t}
+                    </button>
+                  );
+                })}
               </div>
+
+              <input aria-label="Nombre" placeholder="Nombre del plato" value={recipeForm.name} onChange={setR('name')} className={`${field} w-full bg-white dark:bg-zinc-900`} />
               <input aria-label="Descripción" placeholder="Descripción breve (opcional)" value={recipeForm.desc} onChange={setR('desc')} className={`${field} w-full bg-white dark:bg-zinc-900`} />
               <div className="grid grid-cols-4 gap-2">
                 {[['kcal', 'kcal'], ['p', 'Prot.'], ['c', 'Carb.'], ['g', 'Grasa']].map(([k, label]) => (
@@ -681,62 +1704,117 @@ export function Diet({ activeDate }) {
                 ))}
               </div>
               <div className="flex gap-2">
-                {recipeForm.id && <button type="button" onClick={() => setRecipeForm({ id: '', ...blankRecipe })} className="h-11 w-full rounded-2xl bg-slate-200 font-bold text-slate-700 dark:bg-zinc-700 dark:text-slate-200">Cancelar</button>}
-                <button type="submit" className={`${primary} !h-11 ${!recipeForm.id ? 'w-full' : ''}`}>{recipeForm.id ? 'Guardar' : 'Crear receta'}</button>
+                {recipeForm.id && <button type="button" onClick={() => setRecipeForm({ id: '', ...blankRecipe })} className="h-11 w-full rounded-full bg-zinc-300 text-sm font-bold text-zinc-800 dark:bg-zinc-700 dark:text-zinc-200">Cancelar</button>}
+                <button type="submit" className={`${primary} !h-11 !text-sm ${!recipeForm.id ? 'w-full' : ''}`}>{recipeForm.id ? 'Guardar' : 'Crear receta'}</button>
               </div>
             </form>
 
             <div className="space-y-2">
               {recipes.length === 0 && <p className={`text-sm ${muted}`}>No hay recetas guardadas.</p>}
-              {recipes.map(r => (
-                <div key={r.id} className="flex items-center justify-between rounded-2xl border border-zinc-300 px-3 py-2 dark:border-zinc-700">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-bold">{r.name}</p>
-                    {r.desc && <p className={`truncate text-xs ${muted} mb-1`}>{r.desc}</p>}
-                    <p className={`text-xs font-semibold text-zinc-950 dark:text-white`}>{r.kcal} kcal · {r.p}g P</p>
+              {recipes.map((r) => {
+                const Icon = mealIcon(r.type);
+                return (
+                  <div key={r.id} className="flex items-center justify-between gap-2 rounded-2xl border border-zinc-200 p-3 dark:border-zinc-800">
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-zinc-200/80 dark:bg-zinc-800">
+                        <Icon size={16} />
+                      </span>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-bold">{r.name}</p>
+                        {r.desc && <p className={`truncate text-xs ${muted}`}>{r.desc}</p>}
+                        <p className={`text-xs font-semibold ${muted}`}>{r.kcal} kcal · {r.p}g P · {r.c}g C · {r.g}g G</p>
+                      </div>
+                    </div>
+                    <div className="flex shrink-0 gap-1">
+                      <button type="button" onClick={() => editRecipe(r)} aria-label={`Editar ${r.name}`} className="flex size-8 items-center justify-center rounded-full text-slate-400 hover:bg-zinc-200 hover:text-zinc-800 dark:hover:bg-zinc-800 dark:hover:text-white"><Pencil size={15} /></button>
+                      <button type="button" onClick={() => deleteRecipe(r.id)} aria-label={`Eliminar ${r.name}`} className={trash}><Trash2 size={15} /></button>
+                    </div>
                   </div>
-                  <div className="flex shrink-0 gap-1 pl-2">
-                    <button type="button" onClick={() => editRecipe(r)} className="p-2 text-slate-400 hover:text-zinc-700"><Pencil size={15} /></button>
-                    <button type="button" onClick={() => deleteRecipe(r.id)} className="p-2 text-slate-400 hover:text-rose-600"><Trash2 size={15} /></button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         ) : (
           <>
-            <div className="mt-3">
-              <p className={`mb-2 text-xs font-medium ${muted}`}>Sugerencias</p>
+            {/* Carrusel de recetas sugeridas */}
+            <div className="mt-4">
+              <div className="mb-2 flex items-center justify-between">
+                <p className={`text-xs font-semibold uppercase tracking-wider ${muted}`}>Sugerencias rápidas</p>
+                {recipes.length > 0 && <span className={`text-[11px] ${muted}`}>Toca para rellenar</span>}
+              </div>
+
               {recipes.length > 0 ? (
-                <div className="flex snap-x gap-2 overflow-x-auto pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                  {recipes.map((r) => (
-                    <button 
-                      key={r.id} 
-                      type="button" 
-                      onClick={() => loadRecipe(r)}
-                      className="shrink-0 snap-start rounded-2xl bg-zinc-200 px-3 py-2 text-left transition-colors hover:bg-zinc-300 dark:bg-zinc-800 dark:hover:bg-zinc-700 max-w-[200px]"
-                    >
-                      <p className="truncate text-sm font-bold text-zinc-700 dark:text-zinc-200">{r.name}</p>
-                      {r.desc && <p className="truncate text-xs text-zinc-700 dark:text-zinc-200">{r.desc}</p>}
-                      <p className="mt-1 text-xs font-medium text-zinc-950 dark:text-white">{r.kcal} kcal · {r.p}g P</p>
-                    </button>
-                  ))}
+                <div className="-mx-5 flex snap-x gap-2.5 overflow-x-auto px-5 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                  {recipes.map((r) => {
+                    const Icon = mealIcon(r.type);
+                    return (
+                      <button
+                        key={r.id}
+                        type="button"
+                        onClick={() => loadRecipe(r)}
+                        className="w-44 shrink-0 snap-start rounded-2xl bg-zinc-200/80 p-3 text-left transition-colors hover:bg-zinc-300/80 dark:bg-zinc-800 dark:hover:bg-zinc-700"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold opacity-70">
+                            <Icon size={12} /> {r.type}
+                          </span>
+                          <span className="text-[11px] font-extrabold">{r.kcal} kcal</span>
+                        </div>
+                        <p className="mt-1.5 truncate text-sm font-bold">{r.name}</p>
+                        {r.desc && <p className={`truncate text-xs ${muted}`}>{r.desc}</p>}
+                        <p className={`mt-1.5 text-[11px] font-semibold ${muted}`}>{r.p}g P · {r.c}g C · {r.g}g G</p>
+                      </button>
+                    );
+                  })}
                 </div>
               ) : (
                 <p className={`text-sm ${muted}`}>No hay recetas. Toca el lápiz de arriba para añadir una.</p>
               )}
             </div>
 
-            <form onSubmit={submit} className="mt-2 space-y-3">
-              <div className="flex gap-2">
-                <select aria-label="Tipo de comida" value={f.type} onChange={set('type')} className={`${field} shrink-0`}>{['Desayuno', 'Comida', 'Merienda', 'Cena'].map((t) => <option key={t}>{t}</option>)}</select>
-                <input aria-label="Qué has comido" placeholder="Qué has comido" value={f.name} onChange={set('name')} className={`${field} w-full min-w-0`} />
+            {/* Formulario de nueva comida */}
+            <form onSubmit={submit} className="mt-3 space-y-3 border-t border-zinc-200 pt-4 dark:border-zinc-800">
+              <div className="grid grid-cols-4 gap-1.5">
+                {MEAL_TYPES.map(([t, Icon]) => {
+                  const on = f.type === t;
+                  return (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => setF((v) => ({ ...v, type: t }))}
+                      aria-pressed={on}
+                      className={`flex flex-col items-center gap-1 rounded-2xl py-2 text-[11px] font-bold transition-colors ${on ? 'bg-zinc-950 text-white dark:bg-white dark:text-zinc-950' : 'bg-zinc-200/80 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300'}`}
+                    >
+                      <Icon size={14} />
+                      {t}
+                    </button>
+                  );
+                })}
               </div>
+
+              <input aria-label="Qué has comido" placeholder="¿Qué has comido?" value={f.name} onChange={set('name')} className={`${field} w-full`} />
+
               <div className="grid grid-cols-4 gap-2">
-                {[['kcal', 'kcal'], ['p', 'Prot. g'], ['c', 'Carb. g'], ['g', 'Grasa g']].map(([k, label]) => (
-                  <input key={k} inputMode="decimal" aria-label={label} placeholder={label} value={f[k]} onChange={set(k)} className={`${field} w-full min-w-0 px-2 text-center`} />
+                {[
+                  ['kcal', 'kcal', Flame],
+                  ['p', 'Prot. g', Beef],
+                  ['c', 'Carb. g', Wheat],
+                  ['g', 'Grasa g', Droplets],
+                ].map(([k, label, Icon]) => (
+                  <div key={k} className="relative">
+                    <Icon size={12} className={`pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 opacity-50 ${muted}`} />
+                    <input
+                      inputMode="decimal"
+                      aria-label={label}
+                      placeholder={label}
+                      value={f[k]}
+                      onChange={set(k)}
+                      className={`${field} w-full min-w-0 pl-7 pr-1.5 text-center text-xs font-semibold`}
+                    />
+                  </div>
                 ))}
               </div>
+
               <button type="submit" className={`${primary} !h-12`}>Añadir comida</button>
             </form>
           </>
