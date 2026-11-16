@@ -7,6 +7,21 @@ export const DEFAULT_ROUTINES = {
   'Tirón': [{ name: 'Dominadas', muscle: 'Espalda' }, { name: 'Remo con barra', muscle: 'Espalda' }, { name: 'Curl bíceps', muscle: 'Brazos' }],
   Pierna: [{ name: 'Sentadilla', muscle: 'Piernas' }, { name: 'Peso muerto rumano', muscle: 'Piernas' }, { name: 'Prensa', muscle: 'Piernas' }],
 };
+
+// Generación de código de amigo (sin exponer email)
+const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+export const generateFriendCode = () => {
+  const bytes = crypto.getRandomValues(new Uint8Array(6));
+  const body = Array.from(bytes, (b) => CODE_CHARS[b % CODE_CHARS.length]).join('');
+  return `GYM-${body}`;
+};
+export const friendCodeOf = (user) => {
+  if (!user) return 'GYM-000000';
+  if (user.friendCode) return user.friendCode;
+  const clean = String(user.id || user.name || '000000').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+  return `GYM-${clean.slice(0, 6).padEnd(6, '0')}`;
+};
+
 // Para entrenos guardados antes de que cada serie llevara su músculo.
 const legacy = Object.fromEntries(Object.values(DEFAULT_ROUTINES).flat().map((e) => [e.name, e.muscle]));
 export const todayRoutine = (routines) => {

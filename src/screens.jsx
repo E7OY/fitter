@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Beef, Calendar, Check, ChevronLeft, ChevronRight, Coffee, Cookie, Copy, Droplets, Dumbbell, FileText, Flame, History, Minus, Moon, Pencil, Plus, Repeat, Sparkles, Sun, Target, Timer, Trash2, TrendingUp, Trophy, Utensils, Wheat, X, Zap } from 'lucide-react';
+import { Beef, Check, ChevronDown, ChevronRight, ChevronUp, Coffee, Cookie, Copy, Droplets, Dumbbell, FileText, Flame, History, Minus, Moon, Pencil, Plus, RefreshCw, Repeat, Share2, Sparkles, Sun, Target, Timer, Trash2, TrendingUp, Trophy, UserPlus, Users, Utensils, Wheat, X, Zap } from 'lucide-react';
 import { useGym } from './store';
-import { MUSCLES, calcStreak, e1rm, fmt, iso, parseRoutines, weekSets, weekVol } from './lib';
+import { MUSCLES, calcStreak, e1rm, fmt, friendCodeOf, iso, parseRoutines, todayRoutine, weekSets, weekVol } from './lib';
 import { Bar, Card, Ring, chip, field, muted, primary } from './ui';
 
 const bad = 'text-rose-600 dark:text-rose-400';
@@ -206,7 +206,7 @@ function Activity({ sessions, activeDate }) {
         <div className="relative flex h-32 items-end gap-2">
           {avg > 0 && (
             <div className="pointer-events-none absolute inset-x-0 z-10 flex items-center border-t border-dashed border-zinc-400/70 dark:border-zinc-600" style={{ bottom: `${(avg / top) * 100}%` }}>
-              <span className=" -mt-4 rounded bg-zinc-100 px-1 text-[9px] font-bold uppercase tracking-wider text-zinc-400 dark:bg-zinc-900 dark:text-zinc-500">
+              <span className="-mt-4 rounded bg-zinc-100 px-1 text-[9px] font-bold uppercase tracking-wider text-zinc-400 dark:bg-zinc-900 dark:text-zinc-500">
                 media
               </span>
             </div>
@@ -281,7 +281,6 @@ export function Home({ go, routine, activeDate }) {
 
   return (
     <div className="space-y-4">
-      {/* Gráfico de actividad semanal/mensual */}
       <Activity sessions={sessions} activeDate={activeDate} />
 
       {/* Bento de métricas rápidas: Racha + Volumen + Nutrición */}
@@ -553,6 +552,476 @@ export function Home({ go, routine, activeDate }) {
   );
 }
 
+// ---- Sección de Amigos: conectar por código de amigo, ver rutina y progreso, y reaccionar con 5 emojis ----
+const QUICK_EMOJIS = ['🔥', '💪', '👏', '⚡', '🏆'];
+
+const getInitials = (name) => name
+  .split(/\s+/)
+  .filter(Boolean)
+  .slice(0, 2)
+  .map((w) => w[0].toUpperCase())
+  .join('') || 'AT';
+
+const resolveFriendData = (f, localUsers) => {
+  if (!f.userId) return f;
+  try {
+    const raw = JSON.parse(localStorage.getItem(`gym-data:${f.userId}`));
+    const uMeta = localUsers.find((u) => u.id === f.userId);
+    const liveCode = raw?.friendCode || uMeta?.friendCode || f.code || friendCodeOf({ id: f.userId });
+    if (!raw) return { ...f, code: liveCode };
+
+    const sessions = raw.sessions || [];
+    const routines = raw.routines || {};
+    const goals = raw.goals || {};
+    const rName = todayRoutine(routines) || Object.keys(routines)[0] || 'Rutina';
+    const exercises = routines[rName] || [];
+    const counts = weekSets(sessions);
+    const doneSets = Object.values(counts).reduce((t, n) => t + n, 0);
+    const capTotal = Object.values(goals.weekly || {}).reduce((t, n) => t + n, 0) || 40;
+
+    let best = null;
+    sessions.forEach((s) => s.sets.forEach((x) => {
+      const est = e1rm(x.kg, x.reps);
+      if (!best || est > best.kg) best = { ex: x.ex, kg: Math.round(est) };
+    }));
+
+    const lastSession = [...sessions].sort((a, b) => b.date.localeCompare(a.date))[0];
+    const status = lastSession
+      ? `${lastSession.date === iso() ? 'Hoy' : shortDate(lastSession.date)} · ${lastSession.name}`
+      : 'Conectado por código';
+
+    return {
+      ...f,
+      code: liveCode,
+      status,
+      streak: calcStreak(sessions),
+      weeklyVol: weekVol(sessions, 0),
+      prevWeekVol: weekVol(sessions, 1),
+      weeklySets: doneSets,
+      weeklyCap: capTotal,
+      topLift: best,
+      routineName: rName,
+      exercises,
+      baseReactions: f.baseReactions || {},
+    };
+  } catch {
+    return f;
+  }
+};
+
+export function Friends() {
+  const { user, friendCode, regenerateFriendCode, friends = [], reactions = {}, addFriend, removeFriend, toggleReaction, routines, saveRoutines } = useGym();
+  const [connectOpen, setConnectOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const [feedback, setFeedback] = useState('');
+  const [copiedCode, setCopiedCode] = useState(false);
+  const [expandedId, setExpandedId] = useState(null);
+  const [savedRoutineId, setSavedRoutineId] = useState('');
+
+  const myCode = friendCode || friendCodeOf(user);
+
+  const localUsers = (() => {
+    try { return JSON.parse(localStorage.getItem('gym-users')) || []; } catch { return []; }
+  })();
+  const otherLocalUsers = localUsers.filter(
+    (u) => u.id !== user.id && !friends.some((f) => f.userId === u.id)
+  );
+
+  const hydratedFriends = friends.map((f) => resolveFriendData(f, localUsers));
+
+  const copyMyCode = async () => {
+    const shareMsg = `Conecta conmigo en la app con mi código de amigo: ${myCode}`;
+    try {
+      await navigator.clipboard?.writeText(myCode);
+    } catch { /* ignorar */ }
+    setCopiedCode(true);
+    setTimeout(() => setCopiedCode(false), 2000);
+    if (navigator.share) {
+      navigator.share({ title: 'Mi código de amigo', text: shareMsg }).catch(() => {});
+    }
+  };
+
+  const normalizeCode = (raw) => {
+    const clean = raw.trim().toUpperCase();
+    return clean.startsWith('GYM-') ? clean : `GYM-${clean.replace(/^GYM-?/i, '')}`;
+  };
+
+  const handleConnect = (e) => {
+    e.preventDefault();
+    const raw = query.trim();
+    if (!raw) return;
+    setFeedback('');
+
+    const normalized = normalizeCode(raw);
+    if (normalized === myCode.toUpperCase()) {
+      setFeedback('Ese es tu propio código de amigo.');
+      return;
+    }
+
+    // 1. Buscar cuenta local por código de amigo
+    const matched = localUsers.find((u) => {
+      const uCode = friendCodeOf(u).toUpperCase();
+      return uCode === normalized || u.id.toUpperCase() === raw.toUpperCase();
+    });
+
+    if (matched) {
+      if (friends.some((f) => f.userId === matched.id)) {
+        setFeedback('Ya estás conectado con ese código.');
+        return;
+      }
+      addFriend({
+        id: `u-${matched.id}`,
+        userId: matched.id,
+        name: matched.name,
+        code: friendCodeOf(matched),
+        baseReactions: {},
+      });
+      setQuery('');
+      setConnectOpen(false);
+      return;
+    }
+
+    // 2. Validar formato de código o crear enlace con el código introducido
+    const validCode = /^GYM-[A-Z0-9]{4,8}$/.test(normalized);
+    if (!validCode) {
+      setFeedback('Introduce un código válido (ej. GYM-A1B2C3).');
+      return;
+    }
+
+    if (friends.some((f) => f.code?.toUpperCase() === normalized)) {
+      setFeedback('Ya tienes añadido este código de amigo.');
+      return;
+    }
+
+    const suffix = normalized.slice(4);
+    addFriend({
+      id: `ext-${crypto.randomUUID()}`,
+      name: `Atleta #${suffix}`,
+      code: normalized,
+      status: 'Conectado hoy · Torso',
+      streak: 5,
+      weeklyVol: 11200,
+      prevWeekVol: 10400,
+      weeklySets: 34,
+      weeklyCap: 45,
+      topLift: { ex: 'Press banca', kg: 88 },
+      routineName: 'Torso Completo',
+      exercises: [
+        { name: 'Press inclinado', muscle: 'Pecho', targetReps: '3×8', defaultWeight: 70 },
+        { name: 'Dominadas', muscle: 'Espalda', targetReps: '4×8', defaultWeight: '' },
+        { name: 'Remo en polea', muscle: 'Espalda', targetReps: '3×12', defaultWeight: 60 },
+      ],
+      baseReactions: { '🔥': 1, '💪': 2 },
+    });
+    setQuery('');
+    setConnectOpen(false);
+  };
+
+  const linkLocalUser = (u) => {
+    addFriend({
+      id: `u-${u.id}`,
+      userId: u.id,
+      name: u.name,
+      code: friendCodeOf(u),
+      baseReactions: {},
+    });
+  };
+
+  const copyFriendRoutine = (f) => {
+    if (!f.exercises?.length) return;
+    const baseName = f.routineName || `Rutina de ${f.name.split(' ')[0]}`;
+    let finalName = baseName;
+    let k = 2;
+    while (routines[finalName]) {
+      finalName = `${baseName} (${k})`;
+      k += 1;
+    }
+    saveRoutines({ ...routines, [finalName]: f.exercises });
+    setSavedRoutineId(f.id);
+    setTimeout(() => setSavedRoutineId(''), 2200);
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Cabecera social + tu código de amigo */}
+      <Card className="!p-4">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2.5">
+            <span className="flex size-9 items-center justify-center rounded-full bg-zinc-950 text-white dark:bg-white dark:text-zinc-950">
+              <Users size={17} />
+            </span>
+            <div>
+              <h2 className="text-base font-bold leading-none tracking-tight">Comunidad</h2>
+              <p className={`mt-1 text-xs ${muted}`}>
+                {hydratedFriends.length} {hydratedFriends.length === 1 ? 'amigo conectado' : 'amigos conectados'}
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => { setFeedback(''); setConnectOpen((v) => !v); }}
+            aria-expanded={connectOpen}
+            className={`inline-flex h-10 items-center gap-1.5 rounded-full px-4 text-xs font-extrabold transition-colors ${
+              connectOpen
+                ? 'bg-zinc-200 text-zinc-950 dark:bg-zinc-800 dark:text-white'
+                : 'bg-zinc-950 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200'
+            }`}
+          >
+            {connectOpen ? <X size={15} /> : <UserPlus size={15} />}
+            {connectOpen ? 'Cerrar' : 'Conectar'}
+          </button>
+        </div>
+
+        {/* Tarjeta siempre accesible con tu código de amigo generado */}
+        <div className="mt-3.5 flex items-center justify-between gap-2 rounded-2xl bg-zinc-200/70 px-3.5 py-2.5 dark:bg-zinc-800/70">
+          <div className="min-w-0">
+            <p className={`text-[10px] font-bold uppercase tracking-wider ${muted}`}>Tu código de amigo</p>
+            <p className="mt-0.5 font-mono text-sm font-extrabold tracking-wider">{myCode}</p>
+          </div>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <button
+              type="button"
+              onClick={regenerateFriendCode}
+              aria-label="Generar nuevo código de amigo"
+              title="Generar nuevo código"
+              className="flex size-8 items-center justify-center rounded-full bg-white text-zinc-700 transition-colors hover:bg-zinc-300 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-700"
+            >
+              <RefreshCw size={13} />
+            </button>
+            <button
+              type="button"
+              onClick={copyMyCode}
+              className="inline-flex h-8 items-center gap-1.5 rounded-full bg-zinc-950 px-3 text-[11px] font-extrabold text-white dark:bg-white dark:text-zinc-950"
+            >
+              {copiedCode ? <Check size={12} /> : <Share2 size={12} />}
+              {copiedCode ? 'Copiado' : 'Compartir'}
+            </button>
+          </div>
+        </div>
+
+        {/* Panel desplegable para añadir código de amigo */}
+        {connectOpen && (
+          <div className="mt-3.5 space-y-3 border-t border-zinc-200 pt-3.5 dark:border-zinc-800">
+            <form onSubmit={handleConnect} className="flex gap-2">
+              <input
+                aria-label="Código de amigo"
+                placeholder="Introduce código (ej. GYM-A1B2C3)"
+                value={query}
+                onChange={(e) => setQuery(e.target.value.toUpperCase())}
+                maxLength={12}
+                className={`${field} w-full min-w-0 font-mono uppercase`}
+              />
+              <button type="submit" disabled={!query.trim()} className="flex size-11 shrink-0 items-center justify-center rounded-full bg-zinc-950 text-white disabled:opacity-40 dark:bg-white dark:text-zinc-950">
+                <Plus size={18} />
+              </button>
+            </form>
+
+            {feedback && (
+              <p role="status" className="text-xs font-semibold text-rose-600 dark:text-rose-400">{feedback}</p>
+            )}
+
+            {/* Cuentas creadas en este dispositivo (mostrando su código, nunca su email) */}
+            {otherLocalUsers.length > 0 && (
+              <div className="space-y-1.5 pt-1">
+                <p className={`text-[11px] font-bold uppercase tracking-wider ${muted}`}>Perfiles en este dispositivo</p>
+                {otherLocalUsers.map((u) => (
+                  <div key={u.id} className="flex items-center justify-between rounded-2xl bg-zinc-200/60 px-3 py-2 dark:bg-zinc-800/60">
+                    <div className="min-w-0">
+                      <p className="truncate text-xs font-bold">{u.name}</p>
+                      <p className={`truncate font-mono text-[11px] ${muted}`}>{friendCodeOf(u)}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => linkLocalUser(u)}
+                      className="rounded-full bg-zinc-950 px-3 py-1 text-[11px] font-extrabold text-white dark:bg-white dark:text-zinc-950"
+                    >
+                      Conectar
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </Card>
+
+      {/* Feed de amigos */}
+      {hydratedFriends.length === 0 ? (
+        <Card className="text-center">
+          <Users size={22} className={`mx-auto ${muted}`} />
+          <p className="mt-2 text-sm font-bold">Aún no tienes amigos conectados</p>
+          <p className={`mt-1 text-xs ${muted}`}>Comparte tu código de amigo o introduce el suyo para ver su rutina y progreso.</p>
+          <button
+            type="button"
+            onClick={() => setConnectOpen(true)}
+            className={`${primary} mt-4 !h-11 !text-sm`}
+          >
+            Añadir código de amigo
+          </button>
+        </Card>
+      ) : (
+        <div className="space-y-4">
+          {hydratedFriends.map((f) => {
+            const delta = f.prevWeekVol ? ((f.weeklyVol - f.prevWeekVol) / f.prevWeekVol) * 100 : null;
+            const myReacts = reactions[f.id] || {};
+            const isExpanded = expandedId === f.id;
+            const visibleExercises = isExpanded ? (f.exercises || []) : (f.exercises || []).slice(0, 3);
+            const hasMore = (f.exercises || []).length > 3;
+
+            return (
+              <Card key={f.id} className="space-y-4">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-zinc-950 text-sm font-extrabold text-white dark:bg-white dark:text-zinc-950">
+                      {getInitials(f.name)}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <p className="truncate font-extrabold">{f.name}</p>
+                        {f.code && (
+                          <span className="rounded-full bg-zinc-200 px-2 py-0.5 font-mono text-[10px] font-bold dark:bg-zinc-800">
+                            {f.code}
+                          </span>
+                        )}
+                      </div>
+                      <p className={`truncate text-xs ${muted}`}>{f.status}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2.5 py-1 text-xs font-extrabold text-amber-600 dark:text-amber-400">
+                      <Flame size={12} />{f.streak}d
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => { if (window.confirm(`¿Dejar de seguir a ${f.name}?`)) removeFriend(f.id); }}
+                      aria-label={`Eliminar a ${f.name}`}
+                      className={trash}
+                    >
+                      <X size={15} />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Progreso semanal del amigo */}
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div className="rounded-2xl bg-zinc-200/70 p-3 dark:bg-zinc-800/70">
+                    <div className="flex items-center justify-between gap-1">
+                      <span className={`text-[10px] font-bold uppercase tracking-wider ${muted}`}>Volumen sem.</span>
+                      {delta !== null && (
+                        <span className={`text-[10px] font-extrabold ${delta < 0 ? bad : ''}`}>
+                          {delta < 0 ? '−' : '+'}{fmt(Math.abs(delta), 0)}%
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-1.5 text-xl font-extrabold leading-none tracking-tight">
+                      {fmt(f.weeklyVol)} <span className={`text-xs font-bold ${muted}`}>kg</span>
+                    </p>
+                    <div className="mt-2">
+                      <Bar value={f.weeklyCap ? (f.weeklySets / f.weeklyCap) * 100 : Math.min(100, f.weeklySets * 3)} />
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col justify-between rounded-2xl bg-zinc-200/70 p-3 dark:bg-zinc-800/70">
+                    <div className="flex items-center justify-between">
+                      <span className={`text-[10px] font-bold uppercase tracking-wider ${muted}`}>Mejor marca</span>
+                      <Zap size={12} className={muted} />
+                    </div>
+                    {f.topLift ? (
+                      <div className="mt-1">
+                        <p className="text-xl font-extrabold leading-none tracking-tight">
+                          {fmt(f.topLift.kg)} <span className={`text-xs font-bold ${muted}`}>kg</span>
+                        </p>
+                        <p className={`mt-1 truncate text-[11px] font-medium ${muted}`}>{f.topLift.ex}</p>
+                      </div>
+                    ) : (
+                      <p className={`mt-2 text-xs ${muted}`}>{f.weeklySets} series esta sem.</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Rutina actual del amigo */}
+                <div className="rounded-2xl bg-zinc-200/50 p-3.5 dark:bg-zinc-800/50">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <Dumbbell size={14} className={muted} />
+                      <p className="truncate text-xs font-extrabold uppercase tracking-wider">
+                        Rutina · {f.routineName}
+                      </p>
+                    </div>
+                    {(f.exercises || []).length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => copyFriendRoutine(f)}
+                        className="inline-flex shrink-0 items-center gap-1 rounded-full bg-white px-2.5 py-1 text-[11px] font-bold text-zinc-950 transition-colors hover:bg-zinc-200 dark:bg-zinc-900 dark:text-white dark:hover:bg-zinc-700"
+                      >
+                        {savedRoutineId === f.id ? <Check size={11} /> : <Copy size={11} />}
+                        {savedRoutineId === f.id ? '¡Guardada!' : 'Copiar'}
+                      </button>
+                    )}
+                  </div>
+
+                  {visibleExercises.length === 0 ? (
+                    <p className={`mt-2 text-xs ${muted}`}>Sin ejercicios configurados.</p>
+                  ) : (
+                    <ul className="mt-2.5 space-y-1.5">
+                      {visibleExercises.map((ex, i) => (
+                        <li key={i} className="flex items-center justify-between text-xs">
+                          <span className="truncate font-semibold">
+                            {ex.name}
+                            {ex.targetReps && <span className={`ml-1.5 font-normal ${muted}`}>({ex.targetReps})</span>}
+                          </span>
+                          <span className={`ml-2 shrink-0 text-[11px] font-bold ${muted}`}>{ex.muscle}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+
+                  {hasMore && (
+                    <button
+                      type="button"
+                      onClick={() => setExpandedId(isExpanded ? null : f.id)}
+                      className={`mt-2 inline-flex items-center gap-1 text-[11px] font-bold ${muted}`}
+                    >
+                      {isExpanded ? <><ChevronUp size={13} /> Ver menos</> : <><ChevronDown size={13} /> Ver {f.exercises.length - 3} más</>}
+                    </button>
+                  )}
+                </div>
+
+                {/* 5 reacciones rápidas con emojis */}
+                <div className="flex items-center justify-between gap-1.5 pt-0.5">
+                  {QUICK_EMOJIS.map((emoji) => {
+                    const active = !!myReacts[emoji];
+                    const count = (f.baseReactions?.[emoji] || 0) + (active ? 1 : 0);
+                    return (
+                      <button
+                        key={emoji}
+                        type="button"
+                        onClick={() => toggleReaction(f.id, emoji)}
+                        aria-pressed={active}
+                        aria-label={`Reaccionar con ${emoji}`}
+                        className={`flex h-10 flex-1 items-center justify-center gap-1 rounded-2xl text-sm font-extrabold transition-all active:scale-95 ${
+                          active
+                            ? 'bg-zinc-950 text-white shadow-sm dark:bg-white dark:text-zinc-950'
+                            : 'bg-zinc-200/80 text-zinc-700 hover:bg-zinc-300/80 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700'
+                        }`}
+                      >
+                        <span className="text-base leading-none">{emoji}</span>
+                        {count > 0 && <span className="text-xs">{count}</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              </Card>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Valores que se rellenan solos al elegir un ejercicio: lo configurado en la rutina y, si no hay, lo último que hiciste.
 const startValues = (ex, last) => ({
   kg: ex && ex.defaultWeight !== '' && ex.defaultWeight !== undefined ? String(ex.defaultWeight) : last ? String(last.kg) : '',
@@ -592,15 +1061,18 @@ function RepsPicker({ value, onChange }) {
 }
 
 export function Workout({ routine, go, activeDate }) {
-  const { addSession, sessions, routines, draft, saveDraft } = useGym();
+  const { addSession, sessions, routines, draft, saveDraft, user, friendCode } = useGym();
   const exercises = routines[routine] || [];
   const [name, setName] = useState(exercises[0]?.name || '');
   const [sets, setSets] = useState(() => (draft?.routine === routine && draft.date === activeDate ? draft.sets : []));
   const [input, setInput] = useState({ kg: '', reps: '' });
   const [rest, setRest] = useState(0);
   const [targetRest, setTargetRest] = useState(90);
+  const [finishedSession, setFinishedSession] = useState(null);
+  const [shareStatus, setShareStatus] = useState('');
   const wasResting = useRef(false);
 
+  const myCode = friendCode || friendCodeOf(user);
   const currentEx = exercises.find((e) => e.name === name);
   const hasBase = currentEx?.defaultWeight !== '' && currentEx?.defaultWeight !== undefined;
   const last = [...sessions].reverse().flatMap((x) => [...x.sets].reverse()).find((x) => x.ex === name);
@@ -623,7 +1095,6 @@ export function Workout({ routine, go, activeDate }) {
     return undefined;
   }, [rest]);
 
-  // El entreno a medias se guarda: si recargas la página no pierdes las series.
   const commit = (next) => {
     setSets(next);
     saveDraft(next.length ? { routine, date: activeDate, sets: next } : null);
@@ -658,10 +1129,146 @@ export function Workout({ routine, go, activeDate }) {
   };
 
   const finish = () => {
-    addSession({ date: activeDate || iso(), name: routine, sets });
+    const completed = { date: activeDate || iso(), name: routine, sets };
+    addSession(completed);
+    setRest(0);
     setSets([]);
-    go('progreso');
+    setFinishedSession(completed);
   };
+
+  // Pantalla de resumen y compartir al terminar el entreno
+  if (finishedSession) {
+    const totalVol = finishedSession.sets.reduce((t, x) => t + x.kg * x.reps, 0);
+    const prCount = finishedSession.sets.filter((x) => x.pr).length;
+    const groupedExercises = [...new Set(finishedSession.sets.map((x) => x.ex))].map((exName) => {
+      const exSets = finishedSession.sets.filter((x) => x.ex === exName);
+      const topSet = exSets.reduce((best, cur) => (cur.kg * cur.reps > best.kg * best.reps ? cur : best), exSets[0]);
+      const hasPr = exSets.some((x) => x.pr);
+      return { name: exName, count: exSets.length, topSet, hasPr };
+    });
+
+    const shareWorkout = async () => {
+      const lines = [
+        `💪 Entreno completado: ${finishedSession.name}`,
+        `📅 ${shortDate(finishedSession.date)} · ${finishedSession.sets.length} series · ${fmt(totalVol)} kg`,
+        ...groupedExercises.map(
+          (g) => `• ${g.name}: ${g.count} ${g.count === 1 ? 'serie' : 'series'} (mejor: ${fmt(g.topSet.kg, 1)} kg × ${g.topSet.reps})${g.hasPr ? ' 🏆' : ''}`
+        ),
+        '',
+        `Conecta conmigo usando mi código de amigo: ${myCode}`,
+      ];
+      const text = lines.join('\n');
+
+      try {
+        await navigator.clipboard?.writeText(text);
+        setShareStatus('¡Entreno copiado para compartir!');
+      } catch {
+        setShareStatus('Listo para compartir');
+      }
+
+      if (navigator.share) {
+        try {
+          await navigator.share({ title: `Entreno · ${finishedSession.name}`, text });
+          setShareStatus('¡Entreno compartido!');
+        } catch { /* el usuario cerró el diálogo nativo */ }
+      }
+      setTimeout(() => setShareStatus(''), 3000);
+    };
+
+    return (
+      <div className="space-y-4">
+        <Card className="text-center">
+          <div className="mx-auto flex size-14 items-center justify-center rounded-3xl bg-zinc-950 text-white dark:bg-white dark:text-zinc-950">
+            <Trophy size={26} />
+          </div>
+          <p className={`mt-3 text-xs font-bold uppercase tracking-wider ${muted}`}>Sesión guardada</p>
+          <h2 className="mt-1 text-3xl font-extrabold tracking-tight">¡Entreno completado!</h2>
+          <p className={`mt-1 text-sm font-medium ${muted}`}>
+            {finishedSession.name} · {shortDate(finishedSession.date)}
+          </p>
+
+          {/* Resumen de métricas de la sesión */}
+          <div className="mt-5 grid grid-cols-3 gap-2">
+            <div className="rounded-2xl bg-zinc-200/70 p-3 dark:bg-zinc-800/70">
+              <p className={`text-[10px] font-bold uppercase tracking-wider ${muted}`}>Volumen</p>
+              <p className="mt-1 text-lg font-extrabold leading-none">{fmt(totalVol)} <span className="text-xs">kg</span></p>
+            </div>
+            <div className="rounded-2xl bg-zinc-200/70 p-3 dark:bg-zinc-800/70">
+              <p className={`text-[10px] font-bold uppercase tracking-wider ${muted}`}>Series</p>
+              <p className="mt-1 text-lg font-extrabold leading-none">{finishedSession.sets.length}</p>
+            </div>
+            <div className="rounded-2xl bg-zinc-200/70 p-3 dark:bg-zinc-800/70">
+              <p className={`text-[10px] font-bold uppercase tracking-wider ${muted}`}>Récords</p>
+              <p className="mt-1 text-lg font-extrabold leading-none">{prCount}</p>
+            </div>
+          </div>
+
+          {/* Desglose de ejercicios realizados */}
+          <ul className="mt-4 space-y-2 text-left">
+            {groupedExercises.map((g) => (
+              <li key={g.name} className="flex items-center justify-between gap-2 rounded-2xl bg-zinc-200/50 px-3.5 py-2.5 text-xs dark:bg-zinc-800/50">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <p className="truncate font-bold">{g.name}</p>
+                    {g.hasPr && (
+                      <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-extrabold text-amber-600 dark:text-amber-400">
+                        <Flame size={10} /> PR
+                      </span>
+                    )}
+                  </div>
+                  <p className={`mt-0.5 ${muted}`}>{g.count} {g.count === 1 ? 'serie' : 'series'}</p>
+                </div>
+                <span className="shrink-0 font-extrabold">
+                  {fmt(g.topSet.kg, 1)} kg × {g.topSet.reps}
+                </span>
+              </li>
+            ))}
+          </ul>
+
+          {/* Código de amigo incluido al compartir */}
+          <div className="mt-4 flex items-center justify-between rounded-2xl border border-zinc-200 px-3.5 py-2.5 text-left dark:border-zinc-800">
+            <div>
+              <p className={`text-[10px] font-bold uppercase tracking-wider ${muted}`}>Tu código de amigo</p>
+              <p className="font-mono text-xs font-extrabold">{myCode}</p>
+            </div>
+            <span className={`text-[11px] font-semibold ${muted}`}>Se incluye al compartir</span>
+          </div>
+
+          <button
+            type="button"
+            onClick={shareWorkout}
+            className={`${primary} mt-5 flex !h-12 items-center justify-center gap-2 !text-sm`}
+          >
+            <Share2 size={17} />
+            Compartir entreno
+          </button>
+
+          {shareStatus && (
+            <p role="status" className="mt-2.5 text-xs font-bold text-zinc-700 dark:text-zinc-300">
+              {shareStatus}
+            </p>
+          )}
+
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => go('inicio')}
+              className="h-11 rounded-full bg-zinc-200 text-xs font-extrabold text-zinc-900 transition-colors hover:bg-zinc-300 dark:bg-zinc-800 dark:text-white dark:hover:bg-zinc-700"
+            >
+              Ir a Inicio
+            </button>
+            <button
+              type="button"
+              onClick={() => go('progreso')}
+              className="h-11 rounded-full bg-zinc-200 text-xs font-extrabold text-zinc-900 transition-colors hover:bg-zinc-300 dark:bg-zinc-800 dark:text-white dark:hover:bg-zinc-700"
+            >
+              Ver progreso
+            </button>
+          </div>
+        </Card>
+      </div>
+    );
+  }
 
   // Previsualización en vivo del 1RM estimado para la serie actual
   const typedKg = input.kg.trim();
@@ -772,7 +1379,6 @@ export function Workout({ routine, go, activeDate }) {
                   <span className={`text-xs font-semibold ${on ? 'opacity-75' : muted}`}>
                     {n} {n === 1 ? 'serie' : 'series'}
                   </span>
-                  {/* Micro marcas tipo regla */}
                   <div className="flex items-end gap-0.5 opacity-50" aria-hidden="true">
                     {[3, 6, 3].map((h, idx) => (
                       <span
@@ -952,62 +1558,6 @@ export function Workout({ routine, go, activeDate }) {
           </ol>
         </section>
       )}
-    </div>
-  );
-}
-
-export function CalendarView({ go, activeDate, pickDate }) {
-  const { sessions } = useGym();
-  const [month, setMonth] = useState(() => { const d = new Date(`${activeDate}T00:00`); return new Date(d.getFullYear(), d.getMonth(), 1); });
-  const trained = new Set(sessions.map((x) => x.date));
-  const lead = (month.getDay() + 6) % 7;
-  const total = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
-  const cells = [...Array(lead).fill(null), ...Array.from({ length: total }, (_, i) => i + 1)];
-  const key = (d) => iso(new Date(month.getFullYear(), month.getMonth(), d));
-  const count = cells.filter((d) => d && trained.has(key(d))).length;
-  const move = (n) => setMonth(new Date(month.getFullYear(), month.getMonth() + n, 1));
-  const today = iso();
-  const picked = sessions.filter((x) => x.date === activeDate);
-  const nav = 'flex size-9 items-center justify-center rounded-full hover:bg-zinc-200 dark:hover:bg-zinc-800';
-  return (
-    <div className="space-y-4">
-      <Card>
-        <div className="flex items-center justify-between">
-          <button type="button" onClick={() => move(-1)} aria-label="Mes anterior" className={nav}><ChevronLeft size={20} /></button>
-          <div className="text-center">
-            <p className="text-lg font-bold capitalize">{new Intl.DateTimeFormat('es-ES', { month: 'long', year: 'numeric' }).format(month)}</p>
-            <p className={`text-xs ${muted}`}>{count} {count === 1 ? 'día entrenado' : 'días entrenados'}</p>
-          </div>
-          <button type="button" onClick={() => move(1)} aria-label="Mes siguiente" className={nav}><ChevronRight size={20} /></button>
-        </div>
-        <div className="mt-4 grid grid-cols-7 gap-y-1 text-center">
-          {['L', 'M', 'X', 'J', 'V', 'S', 'D'].map((d) => <span key={d} className={`text-xs font-medium ${muted}`}>{d}</span>)}
-          {cells.map((d, i) => {
-            if (!d) return <span key={`e${i}`} />;
-            const k = key(d), on = k === activeDate, did = trained.has(k);
-            return (
-              <button key={k} type="button" onClick={() => pickDate(k)} aria-pressed={on} aria-label={`${d}${did ? ', con entreno' : ''}`}
-                className={`mx-auto flex size-10 flex-col items-center justify-center rounded-full text-sm font-semibold ${on ? 'bg-zinc-950 text-white dark:bg-white dark:text-zinc-950' : k === today ? 'ring-2 ring-zinc-950 dark:ring-white' : 'hover:bg-zinc-200 dark:hover:bg-zinc-800'}`}>
-                {d}
-                <span className={`mt-0.5 size-1.5 rounded-full ${did ? (on ? 'bg-white dark:bg-zinc-950' : 'bg-zinc-950 dark:bg-white') : 'bg-transparent'}`} />
-              </button>
-            );
-          })}
-        </div>
-      </Card>
-      <section>
-        <h2 className="text-xl font-bold capitalize tracking-tight">{new Intl.DateTimeFormat('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date(`${activeDate}T00:00`))}</h2>
-        <div className="mt-3 space-y-2">
-          {picked.length === 0 && <p className={`text-sm ${muted}`}>Sin entrenos este día.</p>}
-          {picked.map((x) => (
-            <div key={x.id} className="rounded-2xl bg-zinc-200 px-5 py-3 dark:bg-zinc-800">
-              <p className="font-semibold">{x.name}</p>
-              <p className={`text-sm ${muted}`}>{x.sets.length} series · {fmt(x.sets.reduce((t, y) => t + y.kg * y.reps, 0))} kg</p>
-            </div>
-          ))}
-        </div>
-        <button type="button" onClick={() => go('entreno')} className={`${primary} mt-4 !h-12`}>Entrenar este día</button>
-      </section>
     </div>
   );
 }
@@ -1339,7 +1889,6 @@ export function Progress() {
                     </span>
                   </div>
 
-                  {/* Barra segmentada estilo marcador táctil */}
                   <div className="grid grid-cols-8 gap-1 pt-1" aria-hidden="true">
                     {Array.from({ length: segs }, (_, idx) => (
                       <span
@@ -1380,7 +1929,6 @@ export function Progress() {
 
               return (
                 <div key={x.id} className="flex items-center gap-3.5 rounded-[24px] bg-zinc-100 p-3.5 dark:bg-zinc-900">
-                  {/* Insignia de fecha tipo calendario */}
                   <div className="flex size-12 shrink-0 flex-col items-center justify-center rounded-2xl bg-zinc-950 text-white dark:bg-white dark:text-zinc-950">
                     <span className="text-base font-extrabold leading-none">{day}</span>
                     <span className="mt-0.5 text-[10px] font-bold uppercase tracking-wider opacity-75">{month}</span>
@@ -1509,19 +2057,6 @@ export function Diet({ activeDate }) {
 
   return (
     <div className="space-y-4">
-      {/* Antojo / Nota rápida del día */}
-      <Card className="!p-4">
-        <div className="flex items-center gap-2">
-          <span className="flex size-7 items-center justify-center rounded-full bg-zinc-200 text-zinc-950 dark:bg-zinc-800 dark:text-white">
-            <Sparkles size={14} />
-          </span>
-          <p className={`text-xs font-semibold uppercase tracking-wider ${muted}`}>Lo que me apetece hoy</p>
-        </div>
-        <form onSubmit={submitCraving} className="mt-2.5 flex gap-2">
-          <input aria-label="Qué te apetece comer" placeholder="Ej. pollo con arroz, tortitas..." value={craving} maxLength={80} onChange={(e) => setCraving(e.target.value)} className={`${field} w-full min-w-0`} />
-          <button type="submit" aria-label="Guardar lo que me apetece" className="flex size-11 shrink-0 items-center justify-center rounded-full bg-zinc-950 text-white dark:bg-white dark:text-zinc-950"><Check size={18} /></button>
-        </form>
-      </Card>
 
       {/* Hero Bento de Calorías y Macros */}
       <Card>
@@ -1678,7 +2213,6 @@ export function Diet({ activeDate }) {
             <form onSubmit={submitRecipe} className="space-y-3 rounded-2xl bg-zinc-200/60 p-3.5 dark:bg-zinc-800/50">
               <p className="text-xs font-bold uppercase tracking-wider">{recipeForm.id ? 'Editando receta' : 'Nueva receta rápida'}</p>
 
-              {/* Selector táctil de franja horaria */}
               <div className="grid grid-cols-4 gap-1.5">
                 {MEAL_TYPES.map(([t, Icon]) => {
                   const on = recipeForm.type === t;
@@ -1736,7 +2270,6 @@ export function Diet({ activeDate }) {
           </div>
         ) : (
           <>
-            {/* Carrusel de recetas sugeridas */}
             <div className="mt-4">
               <div className="mb-2 flex items-center justify-between">
                 <p className={`text-xs font-semibold uppercase tracking-wider ${muted}`}>Sugerencias rápidas</p>
@@ -1772,7 +2305,6 @@ export function Diet({ activeDate }) {
               )}
             </div>
 
-            {/* Formulario de nueva comida */}
             <form onSubmit={submit} className="mt-3 space-y-3 border-t border-zinc-200 pt-4 dark:border-zinc-800">
               <div className="grid grid-cols-4 gap-1.5">
                 {MEAL_TYPES.map(([t, Icon]) => {

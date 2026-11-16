@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { DEFAULT_ROUTINES } from './lib';
+import { DEFAULT_ROUTINES, friendCodeOf, generateFriendCode } from './lib';
 
 const DEFAULT_RECIPES = [
   { id: 'r1', name: 'Tortitas de avena', desc: 'Avena, claras y plátano batido', type: 'Desayuno', kcal: 350, p: 20, c: 45, g: 8 },
@@ -7,11 +7,65 @@ const DEFAULT_RECIPES = [
   { id: 'r3', name: 'Yogur proteico y nueces', desc: 'Yogur natural con un puñado de nueces', type: 'Merienda', kcal: 250, p: 20, c: 10, g: 14 },
   { id: 'r4', name: 'Salmón a la plancha', desc: 'Con guarnición de espárragos', type: 'Cena', kcal: 400, p: 35, c: 0, g: 25 },
 ];
+
+const DEFAULT_FRIENDS = [
+  {
+    id: 'f-carlos',
+    name: 'Carlos Méndez',
+    code: 'GYM-C94M21',
+    status: 'Hoy · Empuje',
+    streak: 9,
+    weeklyVol: 14850,
+    prevWeekVol: 13200,
+    weeklySets: 42,
+    weeklyCap: 54,
+    topLift: { ex: 'Press banca', kg: 105 },
+    routineName: 'Empuje Fuerza',
+    exercises: [
+      { name: 'Press banca', muscle: 'Pecho', targetReps: '4×6', defaultWeight: 90 },
+      { name: 'Press militar', muscle: 'Hombro', targetReps: '3×8', defaultWeight: 55 },
+      { name: 'Fondos lastrados', muscle: 'Pecho', targetReps: '3×10', defaultWeight: 15 },
+      { name: 'Elevaciones laterales', muscle: 'Hombro', targetReps: '4×15', defaultWeight: 12 },
+    ],
+    baseReactions: { '🔥': 4, '💪': 3, '👏': 2, '⚡': 1, '🏆': 2 },
+  },
+  {
+    id: 'f-elena',
+    name: 'Elena Navarro',
+    code: 'GYM-E72N88',
+    status: 'Ayer · Pierna',
+    streak: 14,
+    weeklyVol: 18400,
+    prevWeekVol: 16900,
+    weeklySets: 48,
+    weeklyCap: 52,
+    topLift: { ex: 'Sentadilla', kg: 118 },
+    routineName: 'Pierna Glúteo',
+    exercises: [
+      { name: 'Sentadilla', muscle: 'Piernas', targetReps: '4×6', defaultWeight: 95 },
+      { name: 'Hip thrust', muscle: 'Piernas', targetReps: '4×10', defaultWeight: 120 },
+      { name: 'Peso muerto rumano', muscle: 'Piernas', targetReps: '3×8', defaultWeight: 85 },
+    ],
+    baseReactions: { '🔥': 6, '💪': 5, '👏': 4, '⚡': 3, '🏆': 1 },
+  },
+];
+
 const defaultGoals = { kcal: 2400, p: 160, c: 260, g: 70, weekly: { Pecho: 16, Espalda: 16, Piernas: 14, Hombro: 12, Brazos: 10 } };
-const blank = () => ({ routines: DEFAULT_ROUTINES, sessions: [], meals: [], recipes: DEFAULT_RECIPES, goals: defaultGoals, cravings: {}, draft: null });
+const blank = (user) => ({
+  routines: DEFAULT_ROUTINES,
+  sessions: [],
+  meals: [],
+  recipes: DEFAULT_RECIPES,
+  goals: defaultGoals,
+  cravings: {},
+  draft: null,
+  friends: DEFAULT_FRIENDS,
+  reactions: {},
+  friendCode: friendCodeOf(user),
+});
 
 // Datos de la versión con perfiles: se pasan una sola vez a la primera cuenta que se cree.
-const migrateLegacy = () => {
+const migrateLegacy = (user) => {
   try {
     const old = JSON.parse(localStorage.getItem('gym-data'));
     if (!old || localStorage.getItem('gym-legacy-done')) return null;
@@ -20,7 +74,7 @@ const migrateLegacy = () => {
     const mine = (x) => !x.profileId || x.profileId === pid;
     const goals = old.goals?.[pid] || old.goals?.p1 || old.goals || {};
     return {
-      ...blank(),
+      ...blank(user),
       routines: old.routines || DEFAULT_ROUTINES,
       recipes: old.recipes || DEFAULT_RECIPES,
       sessions: (old.sessions || []).filter(mine),
@@ -38,12 +92,23 @@ export const GymProvider = ({ user, logout, children }) => {
   const [data, setData] = useState(() => {
     try {
       const saved = JSON.parse(localStorage.getItem(key));
-      if (saved) return { ...blank(), ...saved };
+      if (saved) return { ...blank(user), ...saved, friendCode: saved.friendCode || friendCodeOf(user) };
     } catch { /* datos corruptos: se empieza de cero */ }
-    return migrateLegacy() || blank();
+    return migrateLegacy(user) || blank(user);
   });
 
-  useEffect(() => { localStorage.setItem(key, JSON.stringify(data)); }, [key, data]);
+  useEffect(() => {
+    localStorage.setItem(key, JSON.stringify(data));
+    // Sincronizar el código de amigo en la lista local de usuarios para que puedan encontrarte por código
+    try {
+      const users = JSON.parse(localStorage.getItem('gym-users')) || [];
+      const idx = users.findIndex((u) => u.id === user.id);
+      if (idx !== -1 && data.friendCode && users[idx].friendCode !== data.friendCode) {
+        users[idx] = { ...users[idx], friendCode: data.friendCode };
+        localStorage.setItem('gym-users', JSON.stringify(users));
+      }
+    } catch { /* ignorar error de almacenamiento */ }
+  }, [key, data, user.id]);
 
   const up = (fn) => setData((d) => ({ ...d, ...fn(d) }));
   const api = {
@@ -57,13 +122,30 @@ export const GymProvider = ({ user, logout, children }) => {
     saveRoutines: (routines) => up(() => ({ routines })),
     saveGoals: (goals) => up((d) => ({ goals: { ...d.goals, ...goals } })),
     saveRecipes: (recipes) => up(() => ({ recipes })),
-    // Entreno a medias: sobrevive a recargas de la página.
     saveDraft: (draft) => up(() => ({ draft })),
-    // Lo que te apetece comer cada día: { [fecha]: texto }
     saveCraving: (date, text) => up((d) => {
       const next = { ...d.cravings };
       if (text.trim()) next[date] = text.trim(); else delete next[date];
       return { cravings: next };
+    }),
+    regenerateFriendCode: () => up(() => ({ friendCode: generateFriendCode() })),
+    addFriend: (friend) => up((d) => {
+      const list = d.friends || [];
+      if (list.some((f) => f.id === friend.id || (friend.userId && f.userId === friend.userId))) return {};
+      return { friends: [friend, ...list] };
+    }),
+    removeFriend: (id) => up((d) => ({
+      friends: (d.friends || []).filter((f) => f.id !== id),
+    })),
+    toggleReaction: (friendId, emoji) => up((d) => {
+      const prev = d.reactions || {};
+      const current = prev[friendId] || {};
+      return {
+        reactions: {
+          ...prev,
+          [friendId]: { ...current, [emoji]: !current[emoji] },
+        },
+      };
     }),
     exportData: () => {
       const blob = new Blob([JSON.stringify({ app: 'gym', version: 2, data }, null, 2)], { type: 'application/json' });
@@ -77,7 +159,7 @@ export const GymProvider = ({ user, logout, children }) => {
       const parsed = JSON.parse(text);
       const incoming = parsed?.data;
       if (parsed?.app !== 'gym' || !incoming || !Array.isArray(incoming.sessions)) throw new Error('El archivo no es una copia válida.');
-      setData({ ...blank(), ...incoming });
+      setData({ ...blank(user), ...incoming });
     },
   };
   return <Ctx.Provider value={api}>{children}</Ctx.Provider>;
