@@ -20,6 +20,24 @@ export const DEFAULT_ROUTINES = {
   ],
 };
 
+// Formateo de duración del cronómetro en vivo y resumen de sesión
+export const fmtDuration = (sec = 0) => {
+  const s = Math.max(0, Math.floor(sec));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const rem = s % 60;
+  if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(rem).padStart(2, '0')}`;
+  return `${String(m).padStart(2, '0')}:${String(rem).padStart(2, '0')}`;
+};
+
+export const fmtMinutes = (sec = 0) => {
+  const mins = Math.max(1, Math.round(sec / 60));
+  if (mins < 60) return `${mins} min`;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return m ? `${h}h ${m}m` : `${h}h`;
+};
+
 // Generación de código de amigo (sin exponer email)
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 export const generateFriendCode = () => {
@@ -51,9 +69,11 @@ export const weekVol = (sessions, off = 0) => {
   return sessions.filter((s) => s.date >= a && s.date < b)
     .reduce((t, s) => t + s.sets.reduce((u, x) => u + x.kg * x.reps, 0), 0);
 };
+// Las series de calentamiento (type === 'W') no suman al volumen efectivo semanal por músculo.
 export const weekSets = (sessions) => {
   const a = iso(weekStart(0)), counts = {};
   sessions.filter((s) => s.date >= a).forEach((s) => s.sets.forEach((x) => {
+    if (x.type === 'W') return;
     const m = x.muscle || legacy[x.ex];
     if (m) counts[m] = (counts[m] || 0) + 1;
   }));
@@ -72,7 +92,6 @@ export const calcStreak = (sessions) => {
 const DAY = /^(lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo)\b/i;
 const BULLET = /^([-*•–·]|\d+[.)])\s+/;
 const norm = (t) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-// El orden importa: "curl femoral" y "peso muerto rumano" son de Piernas, no de Brazos ni Espalda.
 const MUSCLE_WORDS = [
   ['Piernas', ['sentadilla', 'prensa', 'zancada', 'femoral', 'rumano', 'cuadriceps', 'gemelo', 'gluteo', 'hip thrust', 'pierna']],
   ['Pecho', ['banca', 'pecho', 'apertura', 'fondos', 'cruce', 'flexion', 'pec deck']],
@@ -108,12 +127,12 @@ export function parseRoutines(text) {
 
     const sets = line.match(/(\d+)\s*(?:[x×*]|series?\s*(?:de|x)?)\s*(\d+(?:\s*[-–]\s*\d+)?)/i);
     const kg = line.match(/(\d+(?:[.,]\d+)?)\s*(?:kgs?|kilos?)\b/i);
-    const colon = /[:：]$/.test(line);
+    const colon = /[:：]\$/.test(line);
     const shouting = line === line.toUpperCase() && /[A-ZÁÉÍÓÚÑ]/.test(line);
     const header = hashed || (!bullet && !sets && !kg && (colon || DAY.test(line) || shouting || (first && !/\d/.test(line) && looksLikeExercise(lines[i + 1]))));
 
     if (header) {
-      const title = line.replace(/[:：]+$/, '').trim();
+      const title = line.replace(/[:：]+\$/, '').trim();
       const rest = title.replace(DAY, '').replace(/^[\s\-–:·.,]+/, '').trim();
       const t = rest || title;
       start(cap(t === t.toUpperCase() ? t.toLowerCase() : t));
@@ -128,7 +147,7 @@ export function parseRoutines(text) {
       name = name.replace(sets[0], ' ');
     }
     if (kg) { defaultWeight = Number(kg[1].replace(',', '.')); name = name.replace(kg[0], ' '); }
-    name = name.replace(/[@()]/g, ' ').replace(/\s+/g, ' ').replace(/\s+(con|a|de)\s*$/i, '').replace(/^[\s\-–:·,.]+|[\s\-–:·,.]+$/g, '');
+    name = name.replace(/[@()]/g, ' ').replace(/\s+/g, ' ').replace(/\s+(con|a|de)\s*$/i, '').replace(/^[\s\-–:·,.]+\vert{}[\s\-–:·,.]+$/g, '');
     if (!/[a-záéíóúñ]/i.test(name)) return;
     if (!cur) start('Rutina importada');
     const muscle = guessMuscle(name);

@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowDown, ArrowUp, Beef, Check, ChevronDown, ChevronRight, ChevronUp, Coffee, Cookie, Copy, Droplets, Dumbbell, FileText, Flame, GripVertical, History, Minus, Moon, Pencil, Plus, RefreshCw, Repeat, Share2, SlidersHorizontal, Sun, Target, Timer, Trash2, TrendingUp, Trophy, UserPlus, Users, Utensils, Wheat, X, Zap } from 'lucide-react';
+import { ArrowDown, ArrowUp, Beef, Check, ChevronDown, ChevronRight, ChevronUp, Clock, Coffee, Cookie, Copy, Droplets, Dumbbell, FileText, Flame, GripVertical, History, Minus, Moon, Pencil, Plus, RefreshCw, Repeat, Share2, SlidersHorizontal, StickyNote, Sun, Target, Timer, Trash2, TrendingUp, Trophy, UserPlus, Users, Utensils, Wheat, X, Zap } from 'lucide-react';
 import { useGym } from './store';
-import { MUSCLES, calcStreak, e1rm, fmt, friendCodeOf, iso, parseRoutines, todayRoutine, weekSets, weekVol } from './lib';
+import { MUSCLES, calcStreak, e1rm, fmt, fmtDuration, fmtMinutes, friendCodeOf, iso, parseRoutines, todayRoutine, weekSets, weekVol } from './lib';
 import { Bar, Card, Ring, chip, field, muted, primary } from './ui';
 
 const bad = 'text-rose-600 dark:text-rose-400';
@@ -15,6 +15,22 @@ const dayParts = (d) => {
 };
 const trash = 'flex size-8 shrink-0 items-center justify-center rounded-full text-slate-400 hover:bg-rose-50 hover:text-rose-700 dark:hover:bg-rose-500/10 dark:hover:text-rose-300';
 const mmss = (t) => `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`;
+
+// Tipos de serie (W = Calentamiento, D = Drop-set, F = Al fallo) y opciones de RIR
+const SET_TYPES = [
+  { id: '', short: 'N', label: 'Normal' },
+  { id: 'W', short: 'W', label: 'Calent.' },
+  { id: 'D', short: 'D', label: 'Drop' },
+  { id: 'F', short: 'F', label: 'Fallo' },
+];
+const RIR_OPTIONS = ['0', '1', '2', '3+'];
+
+const setTypeMeta = (type) => {
+  if (type === 'W') return { short: 'W', name: 'Calentamiento', badge: 'border border-dashed border-zinc-400 text-zinc-600 dark:border-zinc-500 dark:text-zinc-300' };
+  if (type === 'D') return { short: 'D', name: 'Drop-set', badge: 'bg-zinc-300 text-zinc-900 dark:bg-zinc-700 dark:text-white' };
+  if (type === 'F') return { short: 'F', name: 'Al fallo', badge: 'bg-rose-500/15 text-rose-600 dark:text-rose-400' };
+  return null;
+};
 
 // Formatea series, repeticiones y peso de un ejercicio (ej. "4×8-12 · 80 kg")
 const formatExerciseMeta = (e) => {
@@ -40,11 +56,9 @@ function RoutineEditor({ routine, onSelect }) {
   const [targetReps, setTargetReps] = useState('');
   const [defaultWeight, setDefaultWeight] = useState('');
 
-  // Edición en línea de un ejercicio existente
   const [editingIdx, setEditingIdx] = useState(null);
   const [editForm, setEditForm] = useState({ name: '', muscle: MUSCLES[0], targetSets: '', targetReps: '', defaultWeight: '' });
 
-  // Estado para arrastrar y soltar
   const [dragIdx, setDragIdx] = useState(null);
   const [overIdx, setOverIdx] = useState(null);
 
@@ -155,7 +169,6 @@ function RoutineEditor({ routine, onSelect }) {
         </div>
       </div>
 
-      {/* Lista reordenable y editable de ejercicios */}
       <div>
         <div className="mb-2 flex items-center justify-between">
           <span className={`text-[11px] font-bold uppercase tracking-wider ${muted}`}>Orden y ejercicios ({list.length})</span>
@@ -248,7 +261,6 @@ function RoutineEditor({ routine, onSelect }) {
                     </div>
                   </div>
 
-                  {/* Formulario desplegable para editar este ejercicio */}
                   {isEditingThis && (
                     <div className="mt-2.5 space-y-2 border-t border-zinc-300/80 pt-2.5 dark:border-zinc-700">
                       <div className="flex gap-2">
@@ -309,7 +321,6 @@ function RoutineEditor({ routine, onSelect }) {
         )}
       </div>
 
-      {/* Añadir nuevo ejercicio con Series, Reps y Peso */}
       <form onSubmit={addExercise} className="space-y-2 rounded-2xl border border-zinc-200 p-3 dark:border-zinc-800">
         <p className={`text-[11px] font-bold uppercase tracking-wider ${muted}`}>Añadir ejercicio</p>
         <div className="flex gap-2">
@@ -531,7 +542,6 @@ export function Home({ go, routine, activeDate }) {
     <div className="space-y-4">
       <Activity sessions={sessions} activeDate={activeDate} />
 
-      {/* Bento de métricas rápidas: Racha + Volumen + Nutrición */}
       <div className="grid grid-cols-2 gap-3">
         <div className="flex flex-col justify-between rounded-[26px] bg-zinc-950 p-4 text-white dark:bg-zinc-900 dark:ring-1 dark:ring-zinc-800">
           <div className="flex items-center justify-between">
@@ -579,7 +589,6 @@ export function Home({ go, routine, activeDate }) {
           </div>
         </div>
 
-        {/* Acceso directo a dieta del día */}
         <button
           type="button"
           onClick={() => go('dieta')}
@@ -605,7 +614,6 @@ export function Home({ go, routine, activeDate }) {
         </button>
       </div>
 
-      {/* Banner de entreno en curso si hay borrador guardado */}
       {hasActiveDraft && (
         <button
           type="button"
@@ -627,7 +635,6 @@ export function Home({ go, routine, activeDate }) {
         </button>
       )}
 
-      {/* Tarjeta principal de rutina */}
       <Card>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -658,7 +665,6 @@ export function Home({ go, routine, activeDate }) {
           </div>
         </div>
 
-        {/* Selector de rutinas */}
         <div className="mt-3.5 flex flex-wrap gap-1.5">
           {Object.keys(routines).map((r) => (
             <button
@@ -740,7 +746,6 @@ export function Home({ go, routine, activeDate }) {
         )}
       </Card>
 
-      {/* Entrenos realizados este día */}
       <section>
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-bold tracking-tight">Entrenos realizados</h2>
@@ -783,6 +788,7 @@ export function Home({ go, routine, activeDate }) {
                       </div>
                       <p className={`mt-0.5 text-xs ${muted}`}>
                         {x.sets.length} series · <b className="font-semibold text-zinc-700 dark:text-zinc-300">{fmt(vol)} kg</b>
+                        {x.duration > 0 && ` · ${fmtMinutes(x.duration)}`}
                       </p>
                     </div>
                   </div>
@@ -826,6 +832,7 @@ const resolveFriendData = (f, localUsers) => {
 
     let best = null;
     sessions.forEach((s) => s.sets.forEach((x) => {
+      if (x.type === 'W') return;
       const est = e1rm(x.kg, x.reps);
       if (!best || est > best.kg) best = { ex: x.ex, kg: Math.round(est) };
     }));
@@ -1299,9 +1306,13 @@ function RepsPicker({ value, onChange }) {
 }
 
 export function Workout({ routine, go, activeDate }) {
-  const { addSession, sessions, routines, saveRoutines, draft, saveDraft, user, friendCode } = useGym();
+  const { addSession, sessions, routines, saveRoutines, draft, saveDraft, user, friendCode, exerciseNotes = {}, saveExerciseNote } = useGym();
   const baseExercises = routines[routine] || [];
   const activeDraft = draft?.routine === routine && draft.date === activeDate ? draft : null;
+
+  // Cronómetro total de la sesión (persiste en draft si recargas la página)
+  const [startedAt] = useState(() => activeDraft?.startedAt || Date.now());
+  const [elapsed, setElapsed] = useState(() => Math.floor((Date.now() - (activeDraft?.startedAt || Date.now())) / 1000));
 
   // Lista editable y reordenable de ejercicios para la sesión actual
   const [sessionExercises, setSessionExercises] = useState(() => {
@@ -1323,10 +1334,16 @@ export function Workout({ routine, go, activeDate }) {
   const [name, setName] = useState(() => sessionExercises[0]?.name || '');
   const [sets, setSets] = useState(() => activeDraft?.sets || []);
   const [input, setInput] = useState({ kg: '', reps: '' });
+  const [setType, setSetType] = useState(''); // '' = Normal, 'W' = Calentamiento, 'D' = Drop-set, 'F' = Al fallo
+  const [rir, setRir] = useState(''); // '', '0', '1', '2', '3+'
   const [rest, setRest] = useState(0);
   const [targetRest, setTargetRest] = useState(90);
   const [finishedSession, setFinishedSession] = useState(null);
   const [shareStatus, setShareStatus] = useState('');
+
+  // Notas fijas por ejercicio
+  const [editingNote, setEditingNote] = useState(false);
+  const [noteDraft, setNoteDraft] = useState(() => exerciseNotes[sessionExercises[0]?.name || ''] || '');
 
   // Panel de organizar ejercicios durante el entreno
   const [organizing, setOrganizing] = useState(false);
@@ -1337,24 +1354,43 @@ export function Workout({ routine, go, activeDate }) {
 
   // Edición en línea de una serie ya registrada
   const [editingSetIdx, setEditingSetIdx] = useState(null);
-  const [editSetForm, setEditSetForm] = useState({ kg: '', reps: '' });
+  const [editSetForm, setEditSetForm] = useState({ kg: '', reps: '', type: '', rir: '' });
 
   const wasResting = useRef(false);
 
   const myCode = friendCode || friendCodeOf(user);
   const currentEx = sessionExercises.find((e) => e.name === name);
   const hasBase = currentEx?.defaultWeight !== '' && currentEx?.defaultWeight !== undefined;
-  const last = [...sessions].reverse().flatMap((x) => [...x.sets].reverse()).find((x) => x.ex === name);
-  const bestBefore = Math.max(0, ...sessions.flatMap((x) => x.sets).filter((x) => x.ex === name).map((x) => e1rm(x.kg, x.reps)));
+  const last = [...sessions].reverse().flatMap((x) => [...x.sets].reverse()).find((x) => x.ex === name && x.type !== 'W')
+    || [...sessions].reverse().flatMap((x) => [...x.sets].reverse()).find((x) => x.ex === name);
+  const bestBefore = Math.max(0, ...sessions.flatMap((x) => x.sets).filter((x) => x.ex === name && x.type !== 'W').map((x) => e1rm(x.kg, x.reps)));
   const mine = sets.map((x, idx) => ({ ...x, idx })).filter((x) => x.ex === name);
+  const effectiveMine = mine.filter((x) => x.type !== 'W');
+  const warmupCount = mine.length - effectiveMine.length;
   const reps = Number(input.reps) || last?.reps || 10;
-  const completedCount = sessionExercises.filter((e) => sets.some((x) => x.ex === e.name)).length;
+  const completedCount = sessionExercises.filter((e) => sets.some((x) => x.ex === e.name && x.type !== 'W')).length;
   const sessionVol = sets.reduce((t, x) => t + x.kg * x.reps, 0);
+  const effectiveTotalSets = sets.filter((x) => x.type !== 'W').length;
 
   useEffect(() => {
     setInput(startValues(currentEx, last));
     setEditingSetIdx(null);
+    setEditingNote(false);
+    setNoteDraft(exerciseNotes[name] || '');
   }, [name]);
+
+  useEffect(() => {
+    if (!editingNote) setNoteDraft(exerciseNotes[name] || '');
+  }, [exerciseNotes, name, editingNote]);
+
+  // Cronómetro total en vivo
+  useEffect(() => {
+    if (finishedSession) return undefined;
+    const timerId = setInterval(() => {
+      setElapsed(Math.floor((Date.now() - startedAt) / 1000));
+    }, 1000);
+    return () => clearInterval(timerId);
+  }, [startedAt, finishedSession]);
 
   // Descanso: cuenta atrás y vibración al terminar.
   useEffect(() => {
@@ -1370,7 +1406,14 @@ export function Workout({ routine, go, activeDate }) {
   const commit = (nextSets, nextExercises = sessionExercises) => {
     setSets(nextSets);
     const hasCustomOrder = JSON.stringify(nextExercises) !== JSON.stringify(baseExercises);
-    saveDraft(nextSets.length || hasCustomOrder ? { routine, date: activeDate, sets: nextSets, exercises: nextExercises } : null);
+    saveDraft(nextSets.length || hasCustomOrder ? { routine, date: activeDate, sets: nextSets, exercises: nextExercises, startedAt } : null);
+  };
+
+  const handleSaveExerciseNote = (e) => {
+    e?.preventDefault();
+    if (!name) return;
+    saveExerciseNote(name, noteDraft);
+    setEditingNote(false);
   };
 
   const moveSessionExercise = (from, to) => {
@@ -1420,11 +1463,23 @@ export function Workout({ routine, go, activeDate }) {
     setTimeout(() => setOrderSavedNotice(false), 2000);
   };
 
-  const push = (kg, r) => {
+  const push = (kg, r, customType = setType, customRir = rir) => {
     if (!name || !(kg >= 0) || !(r > 0)) return;
-    const prior = Math.max(bestBefore, ...sets.filter((x) => x.ex === name).map((x) => e1rm(x.kg, x.reps)));
-    const pr = bestBefore > 0 && e1rm(kg, r) > prior;
-    commit([...sets, { ex: name, muscle: currentEx?.muscle, kg, reps: r, ...(pr && { pr: true }) }]);
+    const isWarmup = customType === 'W';
+    const prior = Math.max(bestBefore, ...sets.filter((x) => x.ex === name && x.type !== 'W').map((x) => e1rm(x.kg, x.reps)));
+    const pr = !isWarmup && bestBefore > 0 && e1rm(kg, r) > prior;
+    commit([
+      ...sets,
+      {
+        ex: name,
+        muscle: currentEx?.muscle,
+        kg,
+        reps: r,
+        ...(customType && { type: customType }),
+        ...(customRir && { rir: customRir }),
+        ...(pr && { pr: true }),
+      },
+    ]);
     setRest(90);
     setTargetRest(90);
   };
@@ -1433,18 +1488,18 @@ export function Workout({ routine, go, activeDate }) {
     event.preventDefault();
     const typed = input.kg.trim();
     const kg = typed !== '' ? Number(typed.replace(',', '.')) : hasBase ? Number(currentEx.defaultWeight) : last?.kg;
-    push(kg, reps);
+    push(kg, reps, setType, rir);
   };
 
   const addQuickSet = () => {
     const lastMine = mine.at(-1);
     if (lastMine) {
-      push(lastMine.kg, lastMine.reps);
+      push(lastMine.kg, lastMine.reps, lastMine.type || '', lastMine.rir || '');
       return;
     }
     const typed = input.kg.trim();
     const kg = typed !== '' ? Number(typed.replace(',', '.')) : hasBase ? Number(currentEx.defaultWeight) : (last?.kg ?? 0);
-    push(Number.isFinite(kg) ? kg : 0, reps);
+    push(Number.isFinite(kg) ? kg : 0, reps, setType, rir);
   };
 
   const startEditSet = (setObj) => {
@@ -1453,17 +1508,31 @@ export function Workout({ routine, go, activeDate }) {
       return;
     }
     setEditingSetIdx(setObj.idx);
-    setEditSetForm({ kg: String(setObj.kg), reps: String(setObj.reps) });
+    setEditSetForm({
+      kg: String(setObj.kg),
+      reps: String(setObj.reps),
+      type: setObj.type || '',
+      rir: setObj.rir || '',
+    });
   };
 
   const saveEditSet = (idx) => {
     const kg = Number(String(editSetForm.kg).replace(',', '.'));
     const r = Math.floor(Number(editSetForm.reps));
     if (!(kg >= 0) || !(r > 0)) return;
+    const isWarmup = editSetForm.type === 'W';
     const next = sets.map((item, i) => {
       if (i !== idx) return item;
-      const pr = bestBefore > 0 && e1rm(kg, r) > bestBefore;
-      return { ...item, kg, reps: r, ...(pr ? { pr: true } : { pr: undefined }) };
+      const pr = !isWarmup && bestBefore > 0 && e1rm(kg, r) > bestBefore;
+      return {
+        ex: item.ex,
+        muscle: item.muscle,
+        kg,
+        reps: r,
+        ...(editSetForm.type && { type: editSetForm.type }),
+        ...(editSetForm.rir && { rir: editSetForm.rir }),
+        ...(pr && { pr: true }),
+      };
     });
     commit(next);
     setEditingSetIdx(null);
@@ -1482,7 +1551,8 @@ export function Workout({ routine, go, activeDate }) {
   };
 
   const finish = () => {
-    const completed = { date: activeDate || iso(), name: routine, sets };
+    const finalDuration = Math.max(1, Math.floor((Date.now() - startedAt) / 1000));
+    const completed = { date: activeDate || iso(), name: routine, sets, duration: finalDuration };
     addSession(completed);
     setRest(0);
     setSets([]);
@@ -1492,20 +1562,23 @@ export function Workout({ routine, go, activeDate }) {
   // Pantalla de resumen y compartir al terminar el entreno
   if (finishedSession) {
     const totalVol = finishedSession.sets.reduce((t, x) => t + x.kg * x.reps, 0);
+    const effectiveCompleted = finishedSession.sets.filter((x) => x.type !== 'W').length;
     const prCount = finishedSession.sets.filter((x) => x.pr).length;
     const groupedExercises = [...new Set(finishedSession.sets.map((x) => x.ex))].map((exName) => {
       const exSets = finishedSession.sets.filter((x) => x.ex === exName);
-      const topSet = exSets.reduce((best, cur) => (cur.kg * cur.reps > best.kg * best.reps ? cur : best), exSets[0]);
+      const workingSets = exSets.filter((x) => x.type !== 'W');
+      const pool = workingSets.length ? workingSets : exSets;
+      const topSet = pool.reduce((best, cur) => (cur.kg * cur.reps > best.kg * best.reps ? cur : best), pool[0]);
       const hasPr = exSets.some((x) => x.pr);
-      return { name: exName, count: exSets.length, topSet, hasPr };
+      return { name: exName, count: exSets.length, workingCount: workingSets.length, topSet, hasPr };
     });
 
     const shareWorkout = async () => {
       const lines = [
         `💪 Entreno completado: ${finishedSession.name}`,
-        `📅 ${shortDate(finishedSession.date)} · ${finishedSession.sets.length} series · ${fmt(totalVol)} kg`,
+        `📅 ${shortDate(finishedSession.date)} · ⏱️ ${fmtMinutes(finishedSession.duration)} · ${effectiveCompleted} series · ${fmt(totalVol)} kg`,
         ...groupedExercises.map(
-          (g) => `• ${g.name}: ${g.count} ${g.count === 1 ? 'serie' : 'series'} (mejor: ${fmt(g.topSet.kg, 1)} kg × ${g.topSet.reps})${g.hasPr ? ' 🏆' : ''}`
+          (g) => `• ${g.name}: ${g.workingCount || g.count} ${g.workingCount === 1 ? 'serie' : 'series'} (mejor: ${fmt(g.topSet.kg, 1)} kg × ${g.topSet.reps}${g.topSet.rir ? ` · RIR ${g.topSet.rir}` : ''})${g.hasPr ? ' 🏆' : ''}`
         ),
         '',
         `Conecta conmigo usando mi código de amigo: ${myCode}`,
@@ -1537,7 +1610,7 @@ export function Workout({ routine, go, activeDate }) {
           <p className={`mt-3 text-xs font-bold uppercase tracking-wider ${muted}`}>Sesión guardada</p>
           <h2 className="mt-1 text-3xl font-extrabold tracking-tight">¡Entreno completado!</h2>
           <p className={`mt-1 text-sm font-medium ${muted}`}>
-            {finishedSession.name} · {shortDate(finishedSession.date)}
+            {finishedSession.name} · {shortDate(finishedSession.date)} · {fmtMinutes(finishedSession.duration)}
           </p>
 
           <div className="mt-5 grid grid-cols-3 gap-2">
@@ -1546,8 +1619,8 @@ export function Workout({ routine, go, activeDate }) {
               <p className="mt-1 text-lg font-extrabold leading-none">{fmt(totalVol)} <span className="text-xs">kg</span></p>
             </div>
             <div className="rounded-2xl bg-zinc-200/70 p-3 dark:bg-zinc-800/70">
-              <p className={`text-[10px] font-bold uppercase tracking-wider ${muted}`}>Series</p>
-              <p className="mt-1 text-lg font-extrabold leading-none">{finishedSession.sets.length}</p>
+              <p className={`text-[10px] font-bold uppercase tracking-wider ${muted}`}>Duración</p>
+              <p className="mt-1 text-lg font-extrabold leading-none">{fmtMinutes(finishedSession.duration)}</p>
             </div>
             <div className="rounded-2xl bg-zinc-200/70 p-3 dark:bg-zinc-800/70">
               <p className={`text-[10px] font-bold uppercase tracking-wider ${muted}`}>Récords</p>
@@ -1567,7 +1640,7 @@ export function Workout({ routine, go, activeDate }) {
                       </span>
                     )}
                   </div>
-                  <p className={`mt-0.5 ${muted}`}>{g.count} {g.count === 1 ? 'serie' : 'series'}</p>
+                  <p className={`mt-0.5 ${muted}`}>{g.workingCount || g.count} {(g.workingCount || g.count) === 1 ? 'serie' : 'series'}</p>
                 </div>
                 <span className="shrink-0 font-extrabold">
                   {fmt(g.topSet.kg, 1)} kg × {g.topSet.reps}
@@ -1623,21 +1696,26 @@ export function Workout({ routine, go, activeDate }) {
   const typedKg = input.kg.trim();
   const resolvedKg = typedKg !== '' ? Number(typedKg.replace(',', '.')) : hasBase ? Number(currentEx.defaultWeight) : last?.kg;
   const preview1rm = Number.isFinite(resolvedKg) && resolvedKg > 0 && reps > 0 ? e1rm(resolvedKg, reps) : 0;
-  const currentBest = Math.max(bestBefore, ...sets.filter((x) => x.ex === name).map((x) => e1rm(x.kg, x.reps)));
-  const willBePr = bestBefore > 0 && preview1rm > currentBest;
+  const currentBest = Math.max(bestBefore, ...sets.filter((x) => x.ex === name && x.type !== 'W').map((x) => e1rm(x.kg, x.reps)));
+  const willBePr = setType !== 'W' && bestBefore > 0 && preview1rm > currentBest;
   const targetMeta = currentEx ? formatExerciseMeta(currentEx) : '';
+  const currentPersistentNote = exerciseNotes[name] || '';
 
   return (
     <div className="space-y-4">
-      {/* Cabecera Bento de la sesión */}
+      {/* Cabecera Bento de la sesión con cronómetro total en vivo */}
       <Card className="!p-4">
         <div className="flex items-center justify-between gap-2">
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
-              <span className="flex size-5 items-center justify-center rounded-full bg-zinc-950 text-white dark:bg-white dark:text-zinc-950">
+              <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-zinc-950 text-white dark:bg-white dark:text-zinc-950">
                 <Dumbbell size={11} />
               </span>
               <span className={`truncate text-xs font-bold uppercase tracking-wider ${muted}`}>{routine}</span>
+              <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-zinc-200/80 px-2 py-0.5 font-mono text-[11px] font-bold text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200" title="Duración total del entreno">
+                <Clock size={10} />
+                {fmtDuration(elapsed)}
+              </span>
             </div>
             <div className="mt-1.5 flex items-baseline gap-2">
               <span className="text-3xl font-extrabold leading-none tracking-tight">
@@ -1680,7 +1758,7 @@ export function Workout({ routine, go, activeDate }) {
         {sessionExercises.length > 0 && (
           <div className="mt-3.5 grid gap-1" style={{ gridTemplateColumns: `repeat(${sessionExercises.length}, minmax(0, 1fr))` }} aria-hidden="true">
             {sessionExercises.map((e) => {
-              const done = sets.some((x) => x.ex === e.name);
+              const done = sets.some((x) => x.ex === e.name && x.type !== 'W');
               const active = e.name === name;
               return (
                 <span
@@ -1700,7 +1778,7 @@ export function Workout({ routine, go, activeDate }) {
 
         {/* Métricas en vivo de la sesión */}
         <div className={`mt-3 flex items-center justify-between border-t border-zinc-200 pt-2.5 text-xs dark:border-zinc-800 ${muted}`}>
-          <span><b className="font-bold text-zinc-950 dark:text-white">{sets.length}</b> {sets.length === 1 ? 'serie hecha' : 'series hechas'}</span>
+          <span><b className="font-bold text-zinc-950 dark:text-white">{effectiveTotalSets}</b> {effectiveTotalSets === 1 ? 'serie efectiva' : 'series efectivas'}</span>
           <span>Volumen: <b className="font-bold text-zinc-950 dark:text-white">{fmt(sessionVol)} kg</b></span>
         </div>
       </Card>
@@ -1726,7 +1804,7 @@ export function Workout({ routine, go, activeDate }) {
 
           <ul className="space-y-1.5">
             {sessionExercises.map((e, i) => {
-              const count = sets.filter((s) => s.ex === e.name).length;
+              const count = sets.filter((s) => s.ex === e.name && s.type !== 'W').length;
               const goalSets = Number(e.targetSets) || 0;
               return (
                 <li key={`${e.name}-${i}`} className="flex items-center justify-between gap-2 rounded-2xl bg-zinc-200/70 px-3 py-2 dark:bg-zinc-800/70">
@@ -1765,7 +1843,7 @@ export function Workout({ routine, go, activeDate }) {
                     >
                       <ArrowDown size={14} />
                     </button>
-                    {count === 0 && (
+                    {sets.filter((s) => s.ex === e.name).length === 0 && (
                       <button
                         type="button"
                         onClick={() => removeSessionExercise(i)}
@@ -1823,7 +1901,7 @@ export function Workout({ routine, go, activeDate }) {
       ) : (
         <div className="-mx-5 flex snap-x snap-mandatory gap-2.5 overflow-x-auto px-5 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {sessionExercises.map((e, idx) => {
-            const n = sets.filter((x) => x.ex === e.name).length;
+            const n = sets.filter((x) => x.ex === e.name && x.type !== 'W').length;
             const goalSets = Number(e.targetSets) || 0;
             const completedGoal = goalSets > 0 ? n >= goalSets : n > 0;
             const on = e.name === name;
@@ -1906,9 +1984,9 @@ export function Workout({ routine, go, activeDate }) {
         </div>
       )}
 
-      {/* Tarjeta principal de registro con RepsPicker intacto */}
+      {/* Tarjeta principal de registro con Nota fija, RepsPicker, Tipo de serie (W, D, F) y RIR */}
       <Card className="text-center">
-        <div className="flex flex-wrap items-center justify-center gap-2">
+        <div className="flex flex-wrap items-center justify-center gap-1.5">
           {targetMeta && (
             <span className="inline-flex items-center gap-1 rounded-full bg-zinc-200/80 px-3 py-1 text-xs font-semibold dark:bg-zinc-800">
               <Target size={12} className={muted} />
@@ -1926,7 +2004,53 @@ export function Workout({ routine, go, activeDate }) {
               Última: <b>{fmt(last.kg, 1)} kg × {last.reps}</b>
             </button>
           )}
+          {!editingNote && !currentPersistentNote && name && (
+            <button
+              type="button"
+              onClick={() => setEditingNote(true)}
+              className={`inline-flex items-center gap-1 rounded-full bg-zinc-200/60 px-2.5 py-1 text-xs font-semibold transition-colors hover:bg-zinc-300 dark:bg-zinc-800/60 dark:hover:bg-zinc-700 ${muted}`}
+            >
+              <StickyNote size={12} /> + Nota fija
+            </button>
+          )}
         </div>
+
+        {/* Nota fija persistente del ejercicio */}
+        {name && (editingNote || currentPersistentNote) && (
+          <div className="mt-2.5">
+            {editingNote ? (
+              <form onSubmit={handleSaveExerciseNote} className="flex items-center gap-1.5 text-left">
+                <input
+                  aria-label="Nota fija del ejercicio"
+                  placeholder="Ej. Asiento al 4, agarre neutro..."
+                  value={noteDraft}
+                  maxLength={120}
+                  autoFocus
+                  onChange={(e) => setNoteDraft(e.target.value)}
+                  className={`${field} !h-9 w-full min-w-0 px-3 text-xs font-medium`}
+                />
+                <button
+                  type="submit"
+                  aria-label="Guardar nota"
+                  className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-zinc-950 text-white dark:bg-white dark:text-zinc-950"
+                >
+                  <Check size={15} />
+                </button>
+              </form>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setEditingNote(true)}
+                title="Editar nota fija de este ejercicio"
+                className="mx-auto inline-flex max-w-full items-center gap-1.5 rounded-2xl bg-zinc-200/80 px-3 py-1.5 text-left text-xs font-medium text-zinc-800 transition-colors hover:bg-zinc-300/80 dark:bg-zinc-800/90 dark:text-zinc-200 dark:hover:bg-zinc-700"
+              >
+                <StickyNote size={12} className={`shrink-0 ${muted}`} />
+                <span className="truncate">{currentPersistentNote}</span>
+                <Pencil size={11} className={`shrink-0 opacity-60 ${muted}`} />
+              </button>
+            )}
+          </div>
+        )}
 
         <p className="mt-3 text-xs font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
           Repeticiones hechas
@@ -1935,7 +2059,7 @@ export function Workout({ routine, go, activeDate }) {
         {/* Deslizador táctil de repeticiones */}
         <RepsPicker value={reps} onChange={(n) => setInput((v) => ({ ...v, reps: String(n) }))} />
 
-        {/* Controles de carga + botón registrar */}
+        {/* Controles de carga, Tipo de serie (W, D, F) y RIR */}
         <form onSubmit={add} className="mt-5 space-y-3">
           <div className="flex items-center gap-2">
             <button
@@ -1969,12 +2093,71 @@ export function Workout({ routine, go, activeDate }) {
             </button>
           </div>
 
+          {/* Selectores compactos: Tipo de serie (N, W, D, F) y RIR (0, 1, 2, 3+) */}
+          <div className="grid grid-cols-2 gap-2 text-left">
+            <div className="rounded-2xl bg-zinc-200/60 p-2 dark:bg-zinc-800/60">
+              <span className={`mb-1.5 block px-1 text-[10px] font-bold uppercase tracking-wider ${muted}`}>
+                Tipo · {SET_TYPES.find((t) => t.id === setType)?.label}
+              </span>
+              <div className="grid grid-cols-4 gap-1">
+                {SET_TYPES.map((t) => {
+                  const active = setType === t.id;
+                  return (
+                    <button
+                      key={t.short}
+                      type="button"
+                      onClick={() => setSetType(t.id)}
+                      aria-pressed={active}
+                      title={t.label}
+                      className={`flex h-8 items-center justify-center rounded-xl text-xs font-extrabold transition-colors ${
+                        active
+                          ? 'bg-zinc-950 text-white dark:bg-white dark:text-zinc-950'
+                          : 'bg-white/80 text-zinc-700 hover:bg-white dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-700'
+                      }`}
+                    >
+                      {t.short}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="rounded-2xl bg-zinc-200/60 p-2 dark:bg-zinc-800/60">
+              <span className={`mb-1.5 block px-1 text-[10px] font-bold uppercase tracking-wider ${muted}`}>
+                RIR {rir ? `· ${rir} en recámara` : '· Opcional'}
+              </span>
+              <div className="grid grid-cols-4 gap-1">
+                {RIR_OPTIONS.map((opt) => {
+                  const active = rir === opt;
+                  return (
+                    <button
+                      key={opt}
+                      type="button"
+                      onClick={() => setRir(active ? '' : opt)}
+                      aria-pressed={active}
+                      aria-label={`RIR ${opt}`}
+                      className={`flex h-8 items-center justify-center rounded-xl text-xs font-extrabold transition-colors ${
+                        active
+                          ? 'bg-zinc-950 text-white dark:bg-white dark:text-zinc-950'
+                          : 'bg-white/80 text-zinc-700 hover:bg-white dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-700'
+                      }`}
+                    >
+                      {opt}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
           <button type="submit" disabled={!name} className={`${primary} flex !h-12 items-center justify-center gap-2 !text-sm`}>
             <Plus size={17} strokeWidth={2.5} />
-            Registrar serie {mine.length + 1}{Number(currentEx?.targetSets) > 0 ? ` de ${currentEx.targetSets}` : ''}
+            {setType === 'W'
+              ? `Registrar calentamiento`
+              : `Registrar serie ${effectiveMine.length + 1}${Number(currentEx?.targetSets) > 0 ? ` de ${currentEx.targetSets}` : ''}`}
           </button>
 
-          {preview1rm > 0 && (
+          {preview1rm > 0 && setType !== 'W' && (
             <div className="flex items-center justify-center gap-2 pt-0.5 text-xs">
               <span className={`inline-flex items-center gap-1 ${muted}`}>
                 <Zap size={12} /> 1RM est.: <b className="font-bold text-zinc-950 dark:text-white">{fmt(preview1rm, 1)} kg</b>
@@ -1993,14 +2176,21 @@ export function Workout({ routine, go, activeDate }) {
       {name && (
         <section>
           <div className="flex items-center justify-between gap-2">
-            <h2 className="text-xl font-bold tracking-tight">
-              Series · {name}
-              {Number(currentEx?.targetSets) > 0 && (
-                <span className={`ml-2 text-sm font-semibold ${muted}`}>
-                  ({mine.length}/{currentEx.targetSets})
-                </span>
+            <div>
+              <h2 className="text-xl font-bold tracking-tight">
+                Series · {name}
+                {Number(currentEx?.targetSets) > 0 && (
+                  <span className={`ml-2 text-sm font-semibold ${muted}`}>
+                    ({effectiveMine.length}/{currentEx.targetSets})
+                  </span>
+                )}
+              </h2>
+              {warmupCount > 0 && (
+                <p className={`text-xs ${muted}`}>
+                  + {warmupCount} {warmupCount === 1 ? 'serie de calentamiento' : 'series de calentamiento'} (no suma al volumen efectivo)
+                </p>
               )}
-            </h2>
+            </div>
             <button
               type="button"
               onClick={addQuickSet}
@@ -2012,85 +2202,147 @@ export function Workout({ routine, go, activeDate }) {
 
           {mine.length > 0 && (
             <ol className="mt-3 space-y-2">
-              {mine.map((x, i) => {
-                const isEditingThisSet = editingSetIdx === x.idx;
-                return (
-                  <li key={x.idx} className="rounded-[22px] bg-zinc-100 p-3 pl-3.5 dark:bg-zinc-900">
-                    <div className="flex items-center justify-between gap-3">
-                      <button
-                        type="button"
-                        onClick={() => startEditSet(x)}
-                        className="flex min-w-0 flex-1 items-center gap-3 text-left"
-                      >
-                        <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-zinc-950 text-xs font-extrabold text-white dark:bg-white dark:text-zinc-950">
-                          {String(i + 1).padStart(2, '0')}
-                        </span>
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <p className="text-sm font-extrabold">
-                              {fmt(x.kg, 1)} kg <span className={`font-semibold ${muted}`}>×</span> {x.reps} reps
-                            </p>
-                            {x.pr && (
-                              <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-extrabold text-amber-600 dark:text-amber-400">
-                                <Trophy size={10} /> Récord
-                              </span>
-                            )}
-                          </div>
-                          <p className={`text-[11px] ${muted}`}>
-                            Volumen: {fmt(x.kg * x.reps)} kg · 1RM {fmt(e1rm(x.kg, x.reps), 1)} kg
-                          </p>
-                        </div>
-                      </button>
+              {(() => {
+                let effectiveCounter = 0;
+                return mine.map((x, i) => {
+                  const isWarmup = x.type === 'W';
+                  if (!isWarmup) effectiveCounter += 1;
+                  const displayNum = isWarmup ? 'W' : String(effectiveCounter).padStart(2, '0');
+                  const isEditingThisSet = editingSetIdx === x.idx;
+                  const tMeta = setTypeMeta(x.type);
 
-                      <div className="flex shrink-0 items-center gap-1">
+                  return (
+                    <li key={x.idx} className="rounded-[22px] bg-zinc-100 p-3 pl-3.5 dark:bg-zinc-900">
+                      <div className="flex items-center justify-between gap-3">
                         <button
                           type="button"
                           onClick={() => startEditSet(x)}
-                          aria-label={`Editar serie ${i + 1}`}
-                          className={`flex size-8 items-center justify-center rounded-full transition-colors ${isEditingThisSet ? 'bg-zinc-950 text-white dark:bg-white dark:text-zinc-950' : 'text-slate-400 hover:bg-zinc-200 dark:hover:bg-zinc-800'}`}
+                          className="flex min-w-0 flex-1 items-center gap-3 text-left"
                         >
-                          <Pencil size={13} />
+                          <span className={`flex size-9 shrink-0 items-center justify-center rounded-xl text-xs font-extrabold ${
+                            isWarmup
+                              ? 'border border-dashed border-zinc-400 text-zinc-500 dark:border-zinc-600 dark:text-zinc-400'
+                              : 'bg-zinc-950 text-white dark:bg-white dark:text-zinc-950'
+                          }`}>
+                            {displayNum}
+                          </span>
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <p className="text-sm font-extrabold">
+                                {fmt(x.kg, 1)} kg <span className={`font-semibold ${muted}`}>×</span> {x.reps} reps
+                              </p>
+                              {tMeta && (
+                                <span className={`rounded-full px-2 py-0.5 text-[10px] font-extrabold ${tMeta.badge}`}>
+                                  {tMeta.short} · {tMeta.name}
+                                </span>
+                              )}
+                              {x.rir && (
+                                <span className="rounded-full bg-zinc-200 px-2 py-0.5 text-[10px] font-extrabold text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+                                  RIR {x.rir}
+                                </span>
+                              )}
+                              {x.pr && (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-extrabold text-amber-600 dark:text-amber-400">
+                                  <Trophy size={10} /> Récord
+                                </span>
+                              )}
+                            </div>
+                            <p className={`text-[11px] ${muted}`}>
+                              {isWarmup
+                                ? 'Serie de calentamiento · excluida de topes semanales'
+                                : `Volumen: ${fmt(x.kg * x.reps)} kg · 1RM ${fmt(e1rm(x.kg, x.reps), 1)} kg`}
+                            </p>
+                          </div>
                         </button>
-                        <button type="button" onClick={() => commit(sets.filter((_, j) => j !== x.idx))} aria-label={`Quitar serie ${i + 1}`} className={trash}>
-                          <X size={15} />
-                        </button>
-                      </div>
-                    </div>
 
-                    {isEditingThisSet && (
-                      <div className="mt-2.5 flex items-center gap-2 border-t border-zinc-200 pt-2.5 dark:border-zinc-800">
-                        <div className="relative min-w-0 flex-1">
-                          <input
-                            inputMode="decimal"
-                            aria-label="Editar kilos"
-                            value={editSetForm.kg}
-                            onChange={(e) => setEditSetForm((v) => ({ ...v, kg: e.target.value }))}
-                            className={`${field} !h-9 w-full pr-7 text-center text-xs font-extrabold`}
-                          />
-                          <span className={`pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold ${muted}`}>kg</span>
+                        <div className="flex shrink-0 items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => startEditSet(x)}
+                            aria-label={`Editar serie ${i + 1}`}
+                            className={`flex size-8 items-center justify-center rounded-full transition-colors ${isEditingThisSet ? 'bg-zinc-950 text-white dark:bg-white dark:text-zinc-950' : 'text-slate-400 hover:bg-zinc-200 dark:hover:bg-zinc-800'}`}
+                          >
+                            <Pencil size={13} />
+                          </button>
+                          <button type="button" onClick={() => commit(sets.filter((_, j) => j !== x.idx))} aria-label={`Quitar serie ${i + 1}`} className={trash}>
+                            <X size={15} />
+                          </button>
                         </div>
-                        <div className="relative min-w-0 flex-1">
-                          <input
-                            inputMode="numeric"
-                            aria-label="Editar repeticiones"
-                            value={editSetForm.reps}
-                            onChange={(e) => setEditSetForm((v) => ({ ...v, reps: e.target.value }))}
-                            className={`${field} !h-9 w-full pr-9 text-center text-xs font-extrabold`}
-                          />
-                          <span className={`pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold ${muted}`}>reps</span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => saveEditSet(x.idx)}
-                          className="flex h-9 shrink-0 items-center gap-1 rounded-xl bg-zinc-950 px-3 text-xs font-extrabold text-white dark:bg-white dark:text-zinc-950"
-                        >
-                          <Check size={14} /> Guardar
-                        </button>
                       </div>
-                    )}
-                  </li>
-                );
-              })}
+
+                      {isEditingThisSet && (
+                        <div className="mt-2.5 space-y-2 border-t border-zinc-200 pt-2.5 dark:border-zinc-800">
+                          <div className="flex items-center gap-2">
+                            <div className="relative min-w-0 flex-1">
+                              <input
+                                inputMode="decimal"
+                                aria-label="Editar kilos"
+                                value={editSetForm.kg}
+                                onChange={(e) => setEditSetForm((v) => ({ ...v, kg: e.target.value }))}
+                                className={`${field} !h-9 w-full pr-7 text-center text-xs font-extrabold`}
+                              />
+                              <span className={`pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold ${muted}`}>kg</span>
+                            </div>
+                            <div className="relative min-w-0 flex-1">
+                              <input
+                                inputMode="numeric"
+                                aria-label="Editar repeticiones"
+                                value={editSetForm.reps}
+                                onChange={(e) => setEditSetForm((v) => ({ ...v, reps: e.target.value }))}
+                                className={`${field} !h-9 w-full pr-9 text-center text-xs font-extrabold`}
+                              />
+                              <span className={`pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold ${muted}`}>reps</span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => saveEditSet(x.idx)}
+                              className="flex h-9 shrink-0 items-center gap-1 rounded-xl bg-zinc-950 px-3 text-xs font-extrabold text-white dark:bg-white dark:text-zinc-950"
+                            >
+                              <Check size={14} /> Guardar
+                            </button>
+                          </div>
+
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex items-center gap-1">
+                              {SET_TYPES.map((t) => (
+                                <button
+                                  key={t.short}
+                                  type="button"
+                                  onClick={() => setEditSetForm((v) => ({ ...v, type: t.id }))}
+                                  className={`h-7 rounded-lg px-2 text-[11px] font-extrabold ${
+                                    editSetForm.type === t.id
+                                      ? 'bg-zinc-950 text-white dark:bg-white dark:text-zinc-950'
+                                      : 'bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300'
+                                  }`}
+                                >
+                                  {t.short}
+                                </button>
+                              ))}
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <span className={`text-[10px] font-bold uppercase ${muted}`}>RIR:</span>
+                              {RIR_OPTIONS.map((opt) => (
+                                <button
+                                  key={opt}
+                                  type="button"
+                                  onClick={() => setEditSetForm((v) => ({ ...v, rir: v.rir === opt ? '' : opt }))}
+                                  className={`h-7 rounded-lg px-2 text-[11px] font-extrabold ${
+                                    editSetForm.rir === opt
+                                      ? 'bg-zinc-950 text-white dark:bg-white dark:text-zinc-950'
+                                      : 'bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300'
+                                  }`}
+                                >
+                                  {opt}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </li>
+                  );
+                });
+              })()}
             </ol>
           )}
         </section>
@@ -2106,19 +2358,18 @@ export function Progress() {
   const [ex, setEx] = useState('');
   const [editing, setEditing] = useState(false);
 
-  // Estado para editar y añadir series en un entreno guardado del historial
   const [editingSessionId, setEditingSessionId] = useState(null);
-  const [newSetForm, setNewSetForm] = useState({ ex: '', kg: '', reps: '' });
+  const [newSetForm, setNewSetForm] = useState({ ex: '', kg: '', reps: '', type: '', rir: '' });
 
-  const names = [...new Set(sessions.flatMap((s) => s.sets.map((x) => x.ex)))];
+  const names = [...new Set(sessions.flatMap((s) => s.sets.filter((x) => x.type !== 'W').map((x) => x.ex)))];
   const sel = names.includes(ex) ? ex : names[0];
   const ordered = [...sessions].sort((a, b) => a.date.localeCompare(b.date));
 
   const pts = ordered
     .map((s) => ({
       date: s.date,
-      v: Math.max(0, ...s.sets.filter((x) => x.ex === sel).map((x) => e1rm(x.kg, x.reps))),
-      maxKg: Math.max(0, ...s.sets.filter((x) => x.ex === sel).map((x) => x.kg)),
+      v: Math.max(0, ...s.sets.filter((x) => x.ex === sel && x.type !== 'W').map((x) => e1rm(x.kg, x.reps))),
+      maxKg: Math.max(0, ...s.sets.filter((x) => x.ex === sel && x.type !== 'W').map((x) => x.kg)),
     }))
     .filter((p) => p.v > 0);
 
@@ -2133,6 +2384,7 @@ export function Progress() {
   const area = coords.length > 1 ? `12,116 ${line} ${coords.at(-1).x},116` : '';
   const gain = pts.length > 1 ? ((pts.at(-1).v - pts[0].v) / pts[0].v) * 100 : 0;
 
+  // weekSets ya excluye las series marcadas como calentamiento ('W')
   const counts = weekSets(sessions);
   const weekly = goals.weekly || {};
   const setCap = (m, v) => {
@@ -2177,8 +2429,8 @@ export function Progress() {
   ];
 
   const lastOf = (n) => {
-    const x = [...ordered].reverse().find((z) => z.sets.some((y) => y.ex === n));
-    return x ? Math.max(...x.sets.filter((y) => y.ex === n).map((y) => e1rm(y.kg, y.reps))) : 0;
+    const x = [...ordered].reverse().find((z) => z.sets.some((y) => y.ex === n && y.type !== 'W'));
+    return x ? Math.max(...x.sets.filter((y) => y.ex === n && y.type !== 'W').map((y) => e1rm(y.kg, y.reps))) : 0;
   };
 
   const hasCaps = Object.keys(weekly).length > 0;
@@ -2198,6 +2450,8 @@ export function Progress() {
       ex: defaultEx,
       kg: lastSet ? String(lastSet.kg) : '',
       reps: lastSet ? String(lastSet.reps) : '',
+      type: '',
+      rir: '',
     });
   };
 
@@ -2209,7 +2463,17 @@ export function Progress() {
     if (!cleanEx || !(kg >= 0) || !(reps > 0) || !updateSession) return;
     const routineEx = Object.values(routines).flat().find((item) => item.name.toLowerCase() === cleanEx.toLowerCase());
     updateSession(session.id, (s) => ({
-      sets: [...s.sets, { ex: cleanEx, muscle: routineEx?.muscle, kg, reps }],
+      sets: [
+        ...s.sets,
+        {
+          ex: cleanEx,
+          muscle: routineEx?.muscle,
+          kg,
+          reps,
+          ...(newSetForm.type && { type: newSetForm.type }),
+          ...(newSetForm.rir && { rir: newSetForm.rir }),
+        },
+      ],
     }));
     setNewSetForm((v) => ({ ...v, kg: String(kg), reps: String(reps) }));
   };
@@ -2266,7 +2530,7 @@ export function Progress() {
         <div className="mt-5 border-t border-zinc-200 pt-4 dark:border-zinc-800">
           <div className="mb-2 flex items-center justify-between text-xs">
             <span className={`font-medium ${muted}`}>
-              {capTotal ? `Objetivo semanal · ${Math.round(weekPct)}%` : 'Series esta semana'}
+              {capTotal ? `Objetivo semanal · ${Math.round(weekPct)}%` : 'Series efectivas esta semana'}
             </span>
             <b className="font-bold">{doneSets}{capTotal ? ` / ${capTotal} series` : ' series'}</b>
           </div>
@@ -2397,7 +2661,7 @@ export function Progress() {
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-xl font-bold tracking-tight">Volumen por músculo</h2>
-            <p className={`text-xs ${muted}`}>{hasCaps ? 'Series semanales vs. tope fijado' : 'Distribución semanal de series'}</p>
+            <p className={`text-xs ${muted}`}>{hasCaps ? 'Series efectivas vs. tope (sin calentamiento)' : 'Series efectivas esta semana (sin calentamiento)'}</p>
           </div>
           <button
             type="button"
@@ -2412,7 +2676,7 @@ export function Progress() {
 
         {editing ? (
           <Card className="mt-3">
-            <p className={`mb-3 text-xs font-medium ${muted}`}>Fija tu tope de series por semana (0 = sin tope)</p>
+            <p className={`mb-3 text-xs font-medium ${muted}`}>Fija tu tope de series efectivas por semana (0 = sin tope)</p>
             <div className="grid grid-cols-2 gap-2.5">
               {MUSCLES.map((m) => (
                 <label key={m} className="rounded-2xl bg-zinc-200/70 p-3 text-xs font-semibold dark:bg-zinc-800/70">
@@ -2431,7 +2695,7 @@ export function Progress() {
         ) : muscleEntries.length === 0 ? (
           <Card className="mt-3 text-center">
             <Dumbbell size={20} className={`mx-auto ${muted}`} />
-            <p className={`mt-2 text-sm ${muted}`}>Sin series registradas esta semana. Pulsa el lápiz para fijar tus topes.</p>
+            <p className={`mt-2 text-sm ${muted}`}>Sin series efectivas registradas esta semana. Pulsa el lápiz para fijar tus topes.</p>
           </Card>
         ) : (
           <div className="mt-3 grid grid-cols-2 gap-2.5">
@@ -2483,7 +2747,7 @@ export function Progress() {
         )}
       </section>
 
-      {/* Historial reciente con edición y posibilidad de añadir series */}
+      {/* Historial reciente con duración, etiquetas W/D/F, RIR y edición */}
       {recent.length > 0 && (
         <section>
           <div className="flex items-center justify-between">
@@ -2528,6 +2792,12 @@ export function Progress() {
                         <span>{x.sets.length} series</span>
                         <span>·</span>
                         <b className="font-semibold text-zinc-700 dark:text-zinc-300">{fmt(vol)} kg</b>
+                        {x.duration > 0 && (
+                          <>
+                            <span>·</span>
+                            <span>{fmtMinutes(x.duration)}</span>
+                          </>
+                        )}
                       </div>
                     </div>
 
@@ -2552,63 +2822,113 @@ export function Progress() {
                     </div>
                   </div>
 
-                  {/* Panel desplegable para ver, quitar o añadir series a este entreno */}
                   {isEditingThis && (
                     <div className="mt-3 space-y-2.5 border-t border-zinc-200 pt-3 dark:border-zinc-800">
                       <ul className="space-y-1.5">
-                        {x.sets.map((s, sIdx) => (
-                          <li key={sIdx} className="flex items-center justify-between gap-2 rounded-xl bg-zinc-200/70 px-3 py-1.5 text-xs dark:bg-zinc-800/70">
-                            <span className="truncate font-semibold">{s.ex}</span>
-                            <span className="flex shrink-0 items-center gap-2">
-                              <span className="font-bold">{fmt(s.kg, 1)} kg × {s.reps}</span>
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveSetFromHistory(x, sIdx)}
-                                aria-label="Eliminar serie"
-                                className="flex size-6 items-center justify-center rounded-full text-slate-400 hover:bg-rose-500/15 hover:text-rose-600"
-                              >
-                                <X size={13} />
-                              </button>
-                            </span>
-                          </li>
-                        ))}
+                        {x.sets.map((s, sIdx) => {
+                          const tMeta = setTypeMeta(s.type);
+                          return (
+                            <li key={sIdx} className="flex items-center justify-between gap-2 rounded-xl bg-zinc-200/70 px-3 py-1.5 text-xs dark:bg-zinc-800/70">
+                              <span className="flex min-w-0 items-center gap-1.5">
+                                {tMeta && (
+                                  <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-extrabold ${tMeta.badge}`}>
+                                    {tMeta.short}
+                                  </span>
+                                )}
+                                <span className="truncate font-semibold">{s.ex}</span>
+                              </span>
+                              <span className="flex shrink-0 items-center gap-1.5">
+                                {s.rir && (
+                                  <span className={`text-[10px] font-bold ${muted}`}>RIR {s.rir}</span>
+                                )}
+                                <span className="font-bold">{fmt(s.kg, 1)} kg × {s.reps}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveSetFromHistory(x, sIdx)}
+                                  aria-label="Eliminar serie"
+                                  className="flex size-6 items-center justify-center rounded-full text-slate-400 hover:bg-rose-500/15 hover:text-rose-600"
+                                >
+                                  <X size={13} />
+                                </button>
+                              </span>
+                            </li>
+                          );
+                        })}
                       </ul>
 
-                      <form onSubmit={(e) => handleAddSetToHistory(e, x)} className="flex gap-1.5">
-                        <input
-                          list={`ex-opts-${x.id}`}
-                          aria-label="Ejercicio"
-                          placeholder="Ejercicio"
-                          value={newSetForm.ex}
-                          onChange={(e) => setNewSetForm((v) => ({ ...v, ex: e.target.value }))}
-                          className={`${field} !h-9 w-full min-w-0 px-2.5 text-xs font-semibold`}
-                        />
-                        <datalist id={`ex-opts-${x.id}`}>
-                          {sessionExerciseOptions.map((opt) => <option key={opt} value={opt} />)}
-                        </datalist>
-                        <input
-                          inputMode="decimal"
-                          aria-label="Kilos"
-                          placeholder="Kg"
-                          value={newSetForm.kg}
-                          onChange={(e) => setNewSetForm((v) => ({ ...v, kg: e.target.value }))}
-                          className={`${field} !h-9 w-16 shrink-0 px-1.5 text-center text-xs font-bold`}
-                        />
-                        <input
-                          inputMode="numeric"
-                          aria-label="Repeticiones"
-                          placeholder="Reps"
-                          value={newSetForm.reps}
-                          onChange={(e) => setNewSetForm((v) => ({ ...v, reps: e.target.value }))}
-                          className={`${field} !h-9 w-16 shrink-0 px-1.5 text-center text-xs font-bold`}
-                        />
-                        <button
-                          type="submit"
-                          aria-label="Añadir serie"
-                          className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-zinc-950 text-white dark:bg-white dark:text-zinc-950"
-                        >
-                          <Plus size={15} />
-                        </button>
+                      <form onSubmit={(e) => handleAddSetToHistory(e, x)} className="space-y-2">
+                        <div className="flex gap-1.5">
+                          <input
+                            list={`ex-opts-${x.id}`}
+                            aria-label="Ejercicio"
+                            placeholder="Ejercicio"
+                            value={newSetForm.ex}
+                            onChange={(e) => setNewSetForm((v) => ({ ...v, ex: e.target.value }))}
+                            className={`${field} !h-9 w-full min-w-0 px-2.5 text-xs font-semibold`}
+                          />
+                          <datalist id={`ex-opts-${x.id}`}>
+                            {sessionExerciseOptions.map((opt) => <option key={opt} value={opt} />)}
+                          </datalist>
+                          <input
+                            inputMode="decimal"
+                            aria-label="Kilos"
+                            placeholder="Kg"
+                            value={newSetForm.kg}
+                            onChange={(e) => setNewSetForm((v) => ({ ...v, kg: e.target.value }))}
+                            className={`${field} !h-9 w-16 shrink-0 px-1.5 text-center text-xs font-bold`}
+                          />
+                          <input
+                            inputMode="numeric"
+                            aria-label="Repeticiones"
+                            placeholder="Reps"
+                            value={newSetForm.reps}
+                            onChange={(e) => setNewSetForm((v) => ({ ...v, reps: e.target.value }))}
+                            className={`${field} !h-9 w-16 shrink-0 px-1.5 text-center text-xs font-bold`}
+                          />
+                          <button
+                            type="submit"
+                            aria-label="Añadir serie"
+                            className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-zinc-950 text-white dark:bg-white dark:text-zinc-950"
+                          >
+                            <Plus size={15} />
+                          </button>
+                        </div>
+
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex items-center gap-1">
+                            {SET_TYPES.map((t) => (
+                              <button
+                                key={t.short}
+                                type="button"
+                                onClick={() => setNewSetForm((v) => ({ ...v, type: t.id }))}
+                                className={`h-7 rounded-lg px-2 text-[11px] font-extrabold ${
+                                  newSetForm.type === t.id
+                                    ? 'bg-zinc-950 text-white dark:bg-white dark:text-zinc-950'
+                                    : 'bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300'
+                                }`}
+                              >
+                                {t.short}
+                              </button>
+                            ))}
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <span className={`text-[10px] font-bold uppercase ${muted}`}>RIR:</span>
+                            {RIR_OPTIONS.map((opt) => (
+                              <button
+                                key={opt}
+                                type="button"
+                                onClick={() => setNewSetForm((v) => ({ ...v, rir: v.rir === opt ? '' : opt }))}
+                                className={`h-7 rounded-lg px-2 text-[11px] font-extrabold ${
+                                  newSetForm.rir === opt
+                                    ? 'bg-zinc-950 text-white dark:bg-white dark:text-zinc-950'
+                                    : 'bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300'
+                                }`}
+                              >
+                                {opt}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
                       </form>
                     </div>
                   )}
@@ -2639,7 +2959,7 @@ const blank = { type: 'Desayuno', name: '', kcal: '', p: '', c: '', g: '' };
 const blankRecipe = { ...blank, desc: '' };
 
 export function Diet({ activeDate }) {
-  const { meals, goals, recipes = [], addMeal, deleteMeal, saveGoals, saveRecipes, cravings = {}, saveCraving } = useGym();
+  const { meals, goals, recipes = [], addMeal, deleteMeal, saveGoals, saveRecipes } = useGym();
   const [f, setF] = useState(blank);
   const [editing, setEditing] = useState(false);
   const myGoals = goals;
@@ -2651,12 +2971,6 @@ export function Diet({ activeDate }) {
   const [recipeForm, setRecipeForm] = useState({ id: '', ...blankRecipe });
 
   const currentDate = activeDate || iso();
-  const [craving, setCraving] = useState('');
-  useEffect(() => setCraving(cravings[currentDate] || ''), [currentDate, cravings]);
-  const submitCraving = (event) => {
-    event.preventDefault();
-    saveCraving(currentDate, craving);
-  };
   const list = meals.filter((m) => m.date === currentDate);
   const prevDay = new Date(`${currentDate}T00:00`);
   prevDay.setDate(prevDay.getDate() - 1);

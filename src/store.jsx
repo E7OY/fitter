@@ -58,6 +58,7 @@ const blank = (user) => ({
   recipes: DEFAULT_RECIPES,
   goals: defaultGoals,
   cravings: {},
+  exerciseNotes: {},
   draft: null,
   friends: DEFAULT_FRIENDS,
   reactions: {},
@@ -127,6 +128,14 @@ export const GymProvider = ({ user, logout, children }) => {
       const next = { ...d.cravings };
       if (text.trim()) next[date] = text.trim(); else delete next[date];
       return { cravings: next };
+    }),
+    // Notas fijas por ejercicio: { [nombreEjercicio]: texto }
+    saveExerciseNote: (exName, text) => up((d) => {
+      const next = { ...(d.exerciseNotes || {}) };
+      const clean = text.trim();
+      if (clean) next[exName] = clean;
+      else delete next[exName];
+      return { exerciseNotes: next };
     }),
     regenerateFriendCode: () => up(() => ({ friendCode: generateFriendCode() })),
     addFriend: (friend) => up((d) => {
