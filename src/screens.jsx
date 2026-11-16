@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Check, Pencil, Plus, Repeat, Trash2, Trophy, Utensils, X } from 'lucide-react';
+import { Check, FileText, Pencil, Plus, Repeat, Trash2, Trophy, Utensils, X } from 'lucide-react';
 import { useGym } from './store';
-import { MUSCLES, calcStreak, e1rm, fmt, iso, weekSets, weekVol } from './lib';
+import { MUSCLES, calcStreak, e1rm, fmt, iso, parseRoutines, weekSets, weekVol } from './lib';
 import { Bar, Card, field, muted, primary } from './ui';
 
 const good = 'text-emerald-600 dark:text-emerald-400';
@@ -78,9 +78,75 @@ function RoutineEditor({ routine, onSelect }) {
   );
 }
 
+function ImportRoutines({ onDone }) {
+  const { routines, saveRoutines } = useGym();
+  const [text, setText] = useState('');
+  const [found, setFound] = useState(null);
+  const [error, setError] = useState('');
+  const [replace, setReplace] = useState(false);
+
+  const analyze = () => {
+    const result = parseRoutines(text);
+    setError(result.length ? '' : 'No he encontrado ejercicios. Pon un ejercicio por línea, por ejemplo: Press banca 4x8 80kg.');
+    setFound(result.length ? result : null);
+  };
+  const setMuscle = (r, i, muscle) => setFound((f) => f.map((x, a) => (a !== r ? x : { ...x, exercises: x.exercises.map((e, b) => (b !== i ? e : { ...e, muscle, review: false })) })));
+  const save = () => {
+    const base = replace ? {} : { ...routines };
+    let first = null;
+    found.forEach(({ name, exercises }) => {
+      let n = name, k = 2;
+      while (base[n]) { n = `${name} ${k}`; k += 1; }
+      base[n] = exercises.map(({ review, ...e }) => e);
+      first = first || n;
+    });
+    saveRoutines(base);
+    onDone(first);
+  };
+
+  if (!found) {
+    return (
+      <div className="mt-4 space-y-3">
+        <textarea aria-label="Texto de tu rutina" rows={9} value={text} onChange={(e) => setText(e.target.value)} placeholder={'Empuje:\nPress banca 4x8 80kg\nPress militar 3x10\n\nTirón:\nDominadas 4x6'} className={`${field} h-auto w-full py-3`} />
+        <p className={`text-xs ${muted}`}>Pega tu rutina de Notas. Pon cada día como título (termina en «:» o deja una línea en blanco antes) y un ejercicio por línea, con series×reps y kilos si quieres.</p>
+        {error && <p role="alert" className="rounded-2xl bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:bg-rose-500/10 dark:text-rose-300">{error}</p>}
+        <button type="button" onClick={analyze} disabled={!text.trim()} className={`${primary} !h-12`}>Reconocer rutina</button>
+      </div>
+    );
+  }
+  const total = found.reduce((t, r) => t + r.exercises.length, 0);
+  return (
+    <div className="mt-4 space-y-4">
+      {found.map((r, ri) => (
+        <div key={ri}>
+          <p className="font-bold">{r.name}</p>
+          <ul className="mt-2 space-y-2">
+            {r.exercises.map((e, i) => (
+              <li key={i} className="flex items-center gap-2 text-sm">
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate">{e.name}</span>
+                  <span className={`text-xs ${muted}`}>{[e.targetReps, e.defaultWeight !== '' && `${e.defaultWeight} kg`].filter(Boolean).join(' · ') || 'Sin series ni peso'}</span>
+                </span>
+                <select aria-label={`Músculo de ${e.name}`} value={e.muscle} onChange={(ev) => setMuscle(ri, i, ev.target.value)} className={`${field} h-9 shrink-0 px-2 ${e.review ? 'ring-2 ring-amber-400' : ''}`}>{MUSCLES.map((m) => <option key={m}>{m}</option>)}</select>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+      <p className={`text-xs ${muted}`}>Revisa los músculos marcados en ámbar: no he podido deducirlos.</p>
+      <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={replace} onChange={(e) => setReplace(e.target.checked)} className="size-4 accent-emerald-700" />Reemplazar mis rutinas actuales</label>
+      <div className="flex gap-2">
+        <button type="button" onClick={() => setFound(null)} className="h-12 shrink-0 rounded-full bg-slate-100 px-5 text-sm font-semibold dark:bg-zinc-800">Volver</button>
+        <button type="button" onClick={save} className={`${primary} !h-12`}>Añadir {found.length} {found.length === 1 ? 'rutina' : 'rutinas'} ({total})</button>
+      </div>
+    </div>
+  );
+}
+
 export function Home({ go, routine }) {
   const { sessions, routines, saveRoutines } = useGym();
   const [editing, setEditing] = useState(false);
+  const [importing, setImporting] = useState(false);
   const mySessions = sessions;
   const week = weekVol(mySessions, 0), prev = weekVol(mySessions, 1);
   const delta = prev ? ((week - prev) / prev) * 100 : null;
@@ -96,7 +162,10 @@ export function Home({ go, routine }) {
       <Card>
         <div className={`flex items-center justify-between text-sm font-medium ${muted}`}>
           <span>Entrenamiento de hoy</span>
-          <button type="button" onClick={() => setEditing((v) => !v)} aria-label="Editar rutinas" aria-pressed={editing} className="flex size-8 items-center justify-center rounded-full hover:bg-slate-100 dark:hover:bg-zinc-800">{editing ? <X size={16} /> : <Pencil size={16} />}</button>
+          <span className="flex items-center gap-1">
+            <button type="button" onClick={() => { setEditing(false); setImporting((v) => !v); }} aria-label="Importar rutina desde texto" aria-pressed={importing} className="flex size-8 items-center justify-center rounded-full hover:bg-slate-100 dark:hover:bg-zinc-800">{importing ? <X size={16} /> : <FileText size={16} />}</button>
+            <button type="button" onClick={() => { setImporting(false); setEditing((v) => !v); }} aria-label="Editar rutinas" aria-pressed={editing} className="flex size-8 items-center justify-center rounded-full hover:bg-slate-100 dark:hover:bg-zinc-800">{editing ? <X size={16} /> : <Pencil size={16} />}</button>
+          </span>
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
           {Object.keys(routines).map((r) => (
@@ -105,7 +174,7 @@ export function Home({ go, routine }) {
           ))}
           {editing && <button type="button" onClick={create} aria-label="Nueva rutina" className="flex size-8 items-center justify-center rounded-full bg-emerald-700 text-white"><Plus size={16} /></button>}
         </div>
-        {editing ? <RoutineEditor routine={routine} onSelect={(r) => go('inicio', r)} /> : (
+        {importing ? <ImportRoutines onDone={(r) => { setImporting(false); go('inicio', r); }} /> : editing ? <RoutineEditor routine={routine} onSelect={(r) => go('inicio', r)} /> : (
           <>
             <p className="mt-4 text-3xl font-extrabold tracking-tight">{routine}</p>
             <p className={`mt-1 text-sm ${muted}`}>{exercises.length} ejercicios</p>
