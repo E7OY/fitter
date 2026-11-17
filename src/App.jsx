@@ -11,7 +11,7 @@ const btn = 'flex h-10 items-center justify-center rounded-full text-slate-800 t
 const row = 'flex h-12 w-full items-center gap-3 rounded-2xl bg-zinc-200 px-4 text-sm font-semibold dark:bg-zinc-800';
 
 export default function App() {
-  const { routines, user, logout, exportData, importData } = useGym();
+  const { routines, user, logout, exportData, importData, draft } = useGym();
   const [tab, setTab] = useState('inicio');
   const [routine, setRoutine] = useState(() => todayRoutine(routines));
   const [dark, setDark] = useState(() => localStorage.getItem('gym-theme') !== 'light');
@@ -30,6 +30,10 @@ export default function App() {
   const go = (next, r) => { if (r) setRoutine(r); setTab(next); };
   const Screen = screens[tab];
   const active = routines[routine] ? routine : Object.keys(routines)[0];
+
+  const hasActiveDraft = draft && Array.isArray(draft.sets) && draft.sets.length > 0;
+  const targetRoutine = hasActiveDraft && routines[draft.routine] ? draft.routine : active;
+  const canStartWorkout = hasActiveDraft || (routines[targetRoutine]?.length > 0);
 
   const baseDate = new Date();
   baseDate.setDate(baseDate.getDate() + dateOffset);
@@ -69,7 +73,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-white text-zinc-950 transition-colors dark:bg-black dark:text-white" onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}>
-      <main className="mx-auto max-w-md px-5 pb-12 pt-8">
+      <main className={`mx-auto max-w-md px-5 pt-8 ${tab !== 'entreno' ? 'pb-28' : 'pb-12'}`}>
         {/* Cabecera con botón de cuenta a la izquierda */}
         <div className="mt-3 flex items-center justify-between gap-2">
           <button type="button" onClick={() => { setNotice(''); setAccount(true); }} aria-label="Mi cuenta" title="Mi cuenta" className="flex size-10 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-zinc-900 transition-colors hover:bg-zinc-200 dark:bg-zinc-900 dark:text-white dark:hover:bg-zinc-800">
@@ -94,6 +98,31 @@ export default function App() {
           <Screen key={`${tab}-${activeDate}`} go={go} routine={active} activeDate={activeDate} />
         </div>
       </main>
+
+      {/* Botón fijo inferior para comenzar o continuar el entreno */}
+      {tab !== 'entreno' && (
+        <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 bg-gradient-to-t from-white via-white/95 to-transparent pb-5 pt-6 dark:from-black dark:via-black/95">
+          <div className="mx-auto max-w-md px-5">
+            <button
+              type="button"
+              onClick={() => go('entreno', targetRoutine)}
+              disabled={!canStartWorkout}
+              className="pointer-events-auto flex h-14 w-full items-center justify-between rounded-full bg-zinc-950 px-5 text-white shadow-[0_8px_28px_rgba(0,0,0,0.22)] transition-all hover:bg-zinc-800 active:scale-[0.99] disabled:opacity-40 dark:bg-white dark:text-zinc-950 dark:shadow-[0_8px_28px_rgba(0,0,0,0.75)] dark:hover:bg-zinc-200"
+            >
+              <span className="flex items-center gap-2.5">
+                <span className="text-base font-bold tracking-tight">
+                  {hasActiveDraft ? 'Continuar entreno' : 'Comenzar entreno'}
+                </span>
+              </span>
+              {targetRoutine && (
+                <span className="max-w-[140px] truncate rounded-full bg-white/15 px-3 py-1 text-xs font-extrabold dark:bg-zinc-950/10">
+                  {targetRoutine} →
+                </span>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Modal de cuenta de usuario */}
       {account && (
