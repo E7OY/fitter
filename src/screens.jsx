@@ -3387,18 +3387,6 @@ export function Diet({ activeDate }) {
 
   return (
     <div className="space-y-4">
-      <Card className="!p-4">
-        <div className="flex items-center gap-2">
-          <span className="flex size-7 items-center justify-center rounded-full bg-zinc-200 text-zinc-950 dark:bg-zinc-800 dark:text-white">
-            <Sparkles size={14} />
-          </span>
-          <p className={`text-xs font-semibold uppercase tracking-wider ${muted}`}>Lo que me apetece hoy</p>
-        </div>
-        <form onSubmit={submitCraving} className="mt-2.5 flex gap-2">
-          <input aria-label="Qué te apetece comer" placeholder="Ej. pollo con arroz, tortitas..." value={craving} maxLength={80} onChange={(e) => setCraving(e.target.value)} className={`${field} w-full min-w-0`} />
-          <button type="submit" aria-label="Guardar lo que me apetece" className="flex size-11 shrink-0 items-center justify-center rounded-full bg-zinc-950 text-white dark:bg-white dark:text-zinc-950"><Check size={18} /></button>
-        </form>
-      </Card>
 
       <Card>
         <div className="flex items-center justify-between">
