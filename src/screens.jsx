@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowDown, ArrowUp, Beef, Check, ChevronDown, ChevronRight, ChevronUp, Clock, Coffee, Cookie, Copy, Droplets, Dumbbell, FileText, Flame, GripVertical, History, Minus, Moon, Pencil, Plus, RefreshCw, Repeat, Share2, SlidersHorizontal, StickyNote, Sun, Target, Timer, Trash2, TrendingUp, Trophy, UserPlus, Users, Utensils, Wheat, X, Zap } from 'lucide-react';
+import { ArrowDown, ArrowUp, Beef, Camera, Check, ChevronDown, ChevronRight, ChevronUp, Clock, Coffee, Cookie, Copy, Droplets, Dumbbell, FileText, Flame, GripVertical, History, Minus, Moon, Pencil, Plus, RefreshCw, Repeat, ScanBarcode, Share2, SlidersHorizontal, Sparkles, StickyNote, Sun, Target, Timer, Trash2, TrendingUp, Trophy, UserPlus, Users, Utensils, Wheat, X, Zap } from 'lucide-react';
 import { useGym } from './store';
-import { MUSCLES, calcStreak, e1rm, fmt, fmtDuration, fmtMinutes, friendCodeOf, iso, parseRoutines, todayRoutine, weekSets, weekVol } from './lib';
-import { Bar, Card, Ring, chip, field, muted, primary } from './ui';
+import { MUSCLES, calcStreak, e1rm, fmt, friendCodeOf, iso, parseRoutines, todayRoutine, weekSets, weekVol } from './lib';
+import { Bar, Card, Ring, field, muted, primary } from './ui';
 
 const bad = 'text-rose-600 dark:text-rose-400';
 const shortDate = (d) => new Date(`${d}T00:00`).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
@@ -15,6 +15,23 @@ const dayParts = (d) => {
 };
 const trash = 'flex size-8 shrink-0 items-center justify-center rounded-full text-slate-400 hover:bg-rose-50 hover:text-rose-700 dark:hover:bg-rose-500/10 dark:hover:text-rose-300';
 const mmss = (t) => `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`;
+
+const formatDur = (sec = 0) => {
+  const s = Math.max(0, Math.floor(sec));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const rem = s % 60;
+  if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(rem).padStart(2, '0')}`;
+  return `${String(m).padStart(2, '0')}:${String(rem).padStart(2, '0')}`;
+};
+
+const formatMins = (sec = 0) => {
+  const mins = Math.max(1, Math.round(sec / 60));
+  if (mins < 60) return `${mins} min`;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return m ? `${h}h ${m}m` : `${h}h`;
+};
 
 // Tipos de serie (W = Calentamiento, D = Drop-set, F = Al fallo) y opciones de RIR
 const SET_TYPES = [
@@ -408,6 +425,7 @@ function ImportRoutines({ onDone }) {
 }
 
 const DAYS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+
 function Activity({ sessions, activeDate }) {
   const [range, setRange] = useState('1S');
   const vol = (list) => list.reduce((t, s) => t + s.sets.reduce((u, x) => u + x.kg * x.reps, 0), 0);
@@ -788,7 +806,7 @@ export function Home({ go, routine, activeDate }) {
                       </div>
                       <p className={`mt-0.5 text-xs ${muted}`}>
                         {x.sets.length} series · <b className="font-semibold text-zinc-700 dark:text-zinc-300">{fmt(vol)} kg</b>
-                        {x.duration > 0 && ` · ${fmtMinutes(x.duration)}`}
+                        {x.duration > 0 && ` · ${formatMins(x.duration)}`}
                       </p>
                     </div>
                   </div>
@@ -1342,8 +1360,10 @@ export function Workout({ routine, go, activeDate }) {
   const [shareStatus, setShareStatus] = useState('');
 
   // Notas fijas por ejercicio
+  const [localNotes, setLocalNotes] = useState({});
+  const allNotes = { ...localNotes, ...exerciseNotes };
   const [editingNote, setEditingNote] = useState(false);
-  const [noteDraft, setNoteDraft] = useState(() => exerciseNotes[sessionExercises[0]?.name || ''] || '');
+  const [noteDraft, setNoteDraft] = useState(() => allNotes[sessionExercises[0]?.name || ''] || '');
 
   // Panel de organizar ejercicios durante el entreno
   const [organizing, setOrganizing] = useState(false);
@@ -1376,12 +1396,12 @@ export function Workout({ routine, go, activeDate }) {
     setInput(startValues(currentEx, last));
     setEditingSetIdx(null);
     setEditingNote(false);
-    setNoteDraft(exerciseNotes[name] || '');
+    setNoteDraft(allNotes[name] || '');
   }, [name]);
 
   useEffect(() => {
-    if (!editingNote) setNoteDraft(exerciseNotes[name] || '');
-  }, [exerciseNotes, name, editingNote]);
+    if (!editingNote) setNoteDraft(allNotes[name] || '');
+  }, [exerciseNotes, localNotes, name, editingNote]);
 
   // Cronómetro total en vivo
   useEffect(() => {
@@ -1412,7 +1432,17 @@ export function Workout({ routine, go, activeDate }) {
   const handleSaveExerciseNote = (e) => {
     e?.preventDefault();
     if (!name) return;
-    saveExerciseNote(name, noteDraft);
+    if (saveExerciseNote) {
+      saveExerciseNote(name, noteDraft);
+    } else {
+      setLocalNotes((prev) => {
+        const next = { ...prev };
+        const clean = noteDraft.trim();
+        if (clean) next[name] = clean;
+        else delete next[name];
+        return next;
+      });
+    }
     setEditingNote(false);
   };
 
@@ -1576,7 +1606,7 @@ export function Workout({ routine, go, activeDate }) {
     const shareWorkout = async () => {
       const lines = [
         `💪 Entreno completado: ${finishedSession.name}`,
-        `📅 ${shortDate(finishedSession.date)} · ⏱️ ${fmtMinutes(finishedSession.duration)} · ${effectiveCompleted} series · ${fmt(totalVol)} kg`,
+        `📅 ${shortDate(finishedSession.date)} · ⏱️ ${formatMins(finishedSession.duration)} · ${effectiveCompleted} series · ${fmt(totalVol)} kg`,
         ...groupedExercises.map(
           (g) => `• ${g.name}: ${g.workingCount || g.count} ${g.workingCount === 1 ? 'serie' : 'series'} (mejor: ${fmt(g.topSet.kg, 1)} kg × ${g.topSet.reps}${g.topSet.rir ? ` · RIR ${g.topSet.rir}` : ''})${g.hasPr ? ' 🏆' : ''}`
         ),
@@ -1610,7 +1640,7 @@ export function Workout({ routine, go, activeDate }) {
           <p className={`mt-3 text-xs font-bold uppercase tracking-wider ${muted}`}>Sesión guardada</p>
           <h2 className="mt-1 text-3xl font-extrabold tracking-tight">¡Entreno completado!</h2>
           <p className={`mt-1 text-sm font-medium ${muted}`}>
-            {finishedSession.name} · {shortDate(finishedSession.date)} · {fmtMinutes(finishedSession.duration)}
+            {finishedSession.name} · {shortDate(finishedSession.date)} · {formatMins(finishedSession.duration)}
           </p>
 
           <div className="mt-5 grid grid-cols-3 gap-2">
@@ -1620,7 +1650,7 @@ export function Workout({ routine, go, activeDate }) {
             </div>
             <div className="rounded-2xl bg-zinc-200/70 p-3 dark:bg-zinc-800/70">
               <p className={`text-[10px] font-bold uppercase tracking-wider ${muted}`}>Duración</p>
-              <p className="mt-1 text-lg font-extrabold leading-none">{fmtMinutes(finishedSession.duration)}</p>
+              <p className="mt-1 text-lg font-extrabold leading-none">{formatMins(finishedSession.duration)}</p>
             </div>
             <div className="rounded-2xl bg-zinc-200/70 p-3 dark:bg-zinc-800/70">
               <p className={`text-[10px] font-bold uppercase tracking-wider ${muted}`}>Récords</p>
@@ -1699,11 +1729,10 @@ export function Workout({ routine, go, activeDate }) {
   const currentBest = Math.max(bestBefore, ...sets.filter((x) => x.ex === name && x.type !== 'W').map((x) => e1rm(x.kg, x.reps)));
   const willBePr = setType !== 'W' && bestBefore > 0 && preview1rm > currentBest;
   const targetMeta = currentEx ? formatExerciseMeta(currentEx) : '';
-  const currentPersistentNote = exerciseNotes[name] || '';
+  const currentPersistentNote = allNotes[name] || '';
 
   return (
     <div className="space-y-4">
-      {/* Cabecera Bento de la sesión con cronómetro total en vivo */}
       <Card className="!p-4">
         <div className="flex items-center justify-between gap-2">
           <div className="min-w-0">
@@ -1714,7 +1743,7 @@ export function Workout({ routine, go, activeDate }) {
               <span className={`truncate text-xs font-bold uppercase tracking-wider ${muted}`}>{routine}</span>
               <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-zinc-200/80 px-2 py-0.5 font-mono text-[11px] font-bold text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200" title="Duración total del entreno">
                 <Clock size={10} />
-                {fmtDuration(elapsed)}
+                {formatDur(elapsed)}
               </span>
             </div>
             <div className="mt-1.5 flex items-baseline gap-2">
@@ -1754,7 +1783,6 @@ export function Workout({ routine, go, activeDate }) {
           </div>
         </div>
 
-        {/* Barra de progreso por ejercicio */}
         {sessionExercises.length > 0 && (
           <div className="mt-3.5 grid gap-1" style={{ gridTemplateColumns: `repeat(${sessionExercises.length}, minmax(0, 1fr))` }} aria-hidden="true">
             {sessionExercises.map((e) => {
@@ -1776,14 +1804,12 @@ export function Workout({ routine, go, activeDate }) {
           </div>
         )}
 
-        {/* Métricas en vivo de la sesión */}
         <div className={`mt-3 flex items-center justify-between border-t border-zinc-200 pt-2.5 text-xs dark:border-zinc-800 ${muted}`}>
           <span><b className="font-bold text-zinc-950 dark:text-white">{effectiveTotalSets}</b> {effectiveTotalSets === 1 ? 'serie efectiva' : 'series efectivas'}</span>
           <span>Volumen: <b className="font-bold text-zinc-950 dark:text-white">{fmt(sessionVol)} kg</b></span>
         </div>
       </Card>
 
-      {/* Panel desplegable para reordenar ejercicios o añadir extras durante el entreno */}
       {organizing && (
         <Card className="space-y-3">
           <div className="flex items-center justify-between">
@@ -1890,7 +1916,6 @@ export function Workout({ routine, go, activeDate }) {
         </Card>
       )}
 
-      {/* Carrusel de ejercicios */}
       {sessionExercises.length === 0 ? (
         <Card className="text-center">
           <p className={`text-sm ${muted}`}>Esta rutina no tiene ejercicios.</p>
@@ -1950,7 +1975,6 @@ export function Workout({ routine, go, activeDate }) {
         </div>
       )}
 
-      {/* Temporizador de descanso compacto */}
       {rest > 0 && (
         <div className="rounded-[26px] bg-zinc-950 p-4 text-white dark:bg-zinc-900 dark:ring-1 dark:ring-zinc-800">
           <div className="flex items-center justify-between gap-3">
@@ -1984,7 +2008,6 @@ export function Workout({ routine, go, activeDate }) {
         </div>
       )}
 
-      {/* Tarjeta principal de registro con Nota fija, RepsPicker, Tipo de serie (W, D, F) y RIR */}
       <Card className="text-center">
         <div className="flex flex-wrap items-center justify-center gap-1.5">
           {targetMeta && (
@@ -2015,7 +2038,6 @@ export function Workout({ routine, go, activeDate }) {
           )}
         </div>
 
-        {/* Nota fija persistente del ejercicio */}
         {name && (editingNote || currentPersistentNote) && (
           <div className="mt-2.5">
             {editingNote ? (
@@ -2056,10 +2078,8 @@ export function Workout({ routine, go, activeDate }) {
           Repeticiones hechas
         </p>
 
-        {/* Deslizador táctil de repeticiones */}
         <RepsPicker value={reps} onChange={(n) => setInput((v) => ({ ...v, reps: String(n) }))} />
 
-        {/* Controles de carga, Tipo de serie (W, D, F) y RIR */}
         <form onSubmit={add} className="mt-5 space-y-3">
           <div className="flex items-center gap-2">
             <button
@@ -2093,7 +2113,6 @@ export function Workout({ routine, go, activeDate }) {
             </button>
           </div>
 
-          {/* Selectores compactos: Tipo de serie (N, W, D, F) y RIR (0, 1, 2, 3+) */}
           <div className="grid grid-cols-2 gap-2 text-left">
             <div className="rounded-2xl bg-zinc-200/60 p-2 dark:bg-zinc-800/60">
               <span className={`mb-1.5 block px-1 text-[10px] font-bold uppercase tracking-wider ${muted}`}>
@@ -2153,7 +2172,7 @@ export function Workout({ routine, go, activeDate }) {
           <button type="submit" disabled={!name} className={`${primary} flex !h-12 items-center justify-center gap-2 !text-sm`}>
             <Plus size={17} strokeWidth={2.5} />
             {setType === 'W'
-              ? `Registrar calentamiento`
+              ? 'Registrar calentamiento'
               : `Registrar serie ${effectiveMine.length + 1}${Number(currentEx?.targetSets) > 0 ? ` de ${currentEx.targetSets}` : ''}`}
           </button>
 
@@ -2172,7 +2191,6 @@ export function Workout({ routine, go, activeDate }) {
         </form>
       </Card>
 
-      {/* Series registradas del ejercicio actual + botón rápido para añadir serie */}
       {name && (
         <section>
           <div className="flex items-center justify-between gap-2">
@@ -2384,7 +2402,6 @@ export function Progress() {
   const area = coords.length > 1 ? `12,116 ${line} ${coords.at(-1).x},116` : '';
   const gain = pts.length > 1 ? ((pts.at(-1).v - pts[0].v) / pts[0].v) * 100 : 0;
 
-  // weekSets ya excluye las series marcadas como calentamiento ('W')
   const counts = weekSets(sessions);
   const weekly = goals.weekly || {};
   const setCap = (m, v) => {
@@ -2747,7 +2764,6 @@ export function Progress() {
         )}
       </section>
 
-      {/* Historial reciente con duración, etiquetas W/D/F, RIR y edición */}
       {recent.length > 0 && (
         <section>
           <div className="flex items-center justify-between">
@@ -2795,7 +2811,7 @@ export function Progress() {
                         {x.duration > 0 && (
                           <>
                             <span>·</span>
-                            <span>{fmtMinutes(x.duration)}</span>
+                            <span>{formatMins(x.duration)}</span>
                           </>
                         )}
                       </div>
@@ -2942,6 +2958,341 @@ export function Progress() {
   );
 }
 
+// ---- Escáner de código de barras conectado a Open Food Facts ----
+function BarcodeScanner({ onClose, onSelect }) {
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
+  const [barcode, setBarcode] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [cameraActive, setCameraActive] = useState(false);
+  const [cameraSupported] = useState(() => typeof window !== 'undefined' && 'BarcodeDetector' in window && !!navigator.mediaDevices?.getUserMedia);
+  const [product, setProduct] = useState(null);
+  const [grams, setGrams] = useState('100');
+
+  const stopCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    }
+    setCameraActive(false);
+  };
+
+  const fetchOpenFoodFacts = async (rawCode) => {
+    const clean = String(rawCode).replace(/\D/g, '');
+    if (clean.length < 6) {
+      setError('Introduce un código de barras válido (al menos 6 dígitos).');
+      return;
+    }
+    stopCamera();
+    setBarcode(clean);
+    setError('');
+    setLoading(true);
+    setProduct(null);
+
+    try {
+      const res = await fetch(`https://world.openfoodfacts.org/api/v2/product/${clean}.json?fields=product_name,product_name_es,brands,nutriments,serving_quantity`);
+      if (!res.ok) throw new Error('Error al conectar con Open Food Facts.');
+      const json = await res.json();
+      if (json.status !== 1 || !json.product) {
+        setError('Producto no encontrado en Open Food Facts. Prueba a escribir los datos manualmente.');
+        setLoading(false);
+        return;
+      }
+
+      const p = json.product;
+      const nut = p.nutriments || {};
+      const baseName = (p.product_name_es || p.product_name || 'Producto escaneado').trim();
+      const brand = p.brands ? p.brands.split(',')[0].trim() : '';
+      const displayName = brand && !baseName.toLowerCase().includes(brand.toLowerCase())
+        ? `${baseName} (${brand})`
+        : baseName;
+
+      const kcal100 = Number(nut['energy-kcal_100g'] ?? (nut.energy_100g ? nut.energy_100g / 4.184 : 0)) || 0;
+      const p100 = Number(nut.proteins_100g) || 0;
+      const c100 = Number(nut.carbohydrates_100g) || 0;
+      const g100 = Number(nut.fat_100g) || 0;
+      const servingQty = Number(p.serving_quantity) || null;
+
+      setProduct({
+        code: clean,
+        name: displayName,
+        kcal100,
+        p100,
+        c100,
+        g100,
+        servingQty,
+      });
+      setGrams(servingQty && servingQty > 0 && servingQty <= 500 ? String(Math.round(servingQty)) : '100');
+    } catch {
+      setError('No se pudo consultar Open Food Facts. Comprueba tu conexión a internet.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const startCamera = async () => {
+    setError('');
+    setProduct(null);
+    if (!cameraSupported) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' } },
+        audio: false,
+      });
+      streamRef.current = stream;
+      setCameraActive(true);
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play().catch(() => {});
+      }
+    } catch {
+      setCameraActive(false);
+      setError('No se pudo abrir la cámara. Puedes escribir el número del código de barras abajo.');
+    }
+  };
+
+  useEffect(() => {
+    if (cameraSupported) startCamera();
+    return () => stopCamera();
+  }, []);
+
+  // Bucle de lectura con BarcodeDetector mientras la cámara está activa
+  useEffect(() => {
+    if (!cameraActive || !cameraSupported) return undefined;
+    let detector;
+    try {
+      detector = new window.BarcodeDetector({
+        formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128'],
+      });
+    } catch {
+      return undefined;
+    }
+
+    let cancelled = false;
+    const interval = setInterval(async () => {
+      if (cancelled || !videoRef.current || videoRef.current.readyState < 2) return;
+      try {
+        const codes = await detector.detect(videoRef.current);
+        if (codes.length > 0 && codes[0].rawValue) {
+          cancelled = true;
+          navigator.vibrate?.(100);
+          fetchOpenFoodFacts(codes[0].rawValue);
+        }
+      } catch { /* ignorar fotograma fallido */ }
+    }, 350);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [cameraActive, cameraSupported]);
+
+  const gNum = Math.max(0, Number(String(grams).replace(',', '.')) || 0);
+  const factor = gNum / 100;
+  const scaled = product ? {
+    kcal: Math.round(product.kcal100 * factor),
+    p: Math.round(product.p100 * factor * 10) / 10,
+    c: Math.round(product.c100 * factor * 10) / 10,
+    g: Math.round(product.g100 * factor * 10) / 10,
+  } : null;
+
+  const confirmProduct = () => {
+    if (!product || !scaled) return;
+    const label = gNum > 0 && gNum !== 100 ? `${product.name} (${gNum}g)` : product.name;
+    onSelect({
+      name: label,
+      kcal: String(scaled.kcal),
+      p: String(scaled.p),
+      c: String(scaled.c),
+      g: String(scaled.g),
+    });
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-[2px]"
+      onMouseDown={(e) => { if (e.target === e.currentTarget) { stopCamera(); onClose(); } }}
+    >
+      <section role="dialog" aria-modal="true" aria-labelledby="scanner-title" className="relative w-full max-w-md rounded-3xl bg-white p-5 shadow-xl dark:bg-zinc-900">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <span className="flex size-8 items-center justify-center rounded-full bg-zinc-950 text-white dark:bg-white dark:text-zinc-950">
+              <ScanBarcode size={16} />
+            </span>
+            <div>
+              <h2 id="scanner-title" className="text-base font-bold leading-none">Escanear producto</h2>
+              <p className={`mt-1 text-[11px] ${muted}`}>Base de datos Open Food Facts</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => { stopCamera(); onClose(); }}
+            aria-label="Cerrar escáner"
+            className="flex size-8 items-center justify-center rounded-full text-slate-500 hover:bg-zinc-200 dark:text-slate-300 dark:hover:bg-zinc-800"
+          >
+            <X size={17} />
+          </button>
+        </div>
+
+        {/* Visor de cámara */}
+        {!product && (
+          <div className="mt-4 space-y-3">
+            {cameraActive ? (
+              <div className="relative overflow-hidden rounded-2xl bg-black aspect-[16/10]">
+                <video ref={videoRef} playsInline muted autoPlay className="size-full object-cover" />
+                <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center p-6">
+                  <div className="h-24 w-full max-w-[240px] rounded-2xl border-2 border-white/80 shadow-[0_0_0_9999px_rgba(0,0,0,0.45)]">
+                    <div className="mt-11 h-0.5 w-full bg-rose-500/90" />
+                  </div>
+                  <span className="mt-3 rounded-full bg-black/70 px-3 py-1 text-[11px] font-semibold text-white">
+                    Apunta al código de barras
+                  </span>
+                </div>
+              </div>
+            ) : !cameraSupported ? (
+              <div className="rounded-2xl bg-zinc-100 p-3.5 text-xs dark:bg-zinc-800/70">
+                <p className="font-semibold">Escaneo automático por cámara no disponible en este navegador.</p>
+                <p className={`mt-1 ${muted}`}>Escribe los números del código de barras del envase para buscar sus calorías y macros al instante.</p>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={startCamera}
+                className="flex h-11 w-full items-center justify-center gap-2 rounded-2xl bg-zinc-200 text-xs font-bold dark:bg-zinc-800"
+              >
+                <Camera size={15} /> Activar cámara
+              </button>
+            )}
+
+            {/* Búsqueda manual por código numérico */}
+            <form
+              onSubmit={(e) => { e.preventDefault(); fetchOpenFoodFacts(barcode); }}
+              className="flex gap-2"
+            >
+              <input
+                inputMode="numeric"
+                aria-label="Código de barras"
+                placeholder="Código de barras (ej. 8410076472540)"
+                value={barcode}
+                onChange={(e) => setBarcode(e.target.value)}
+                className={`${field} w-full min-w-0 font-mono`}
+              />
+              <button
+                type="submit"
+                disabled={loading || !barcode.trim()}
+                className="h-11 shrink-0 rounded-2xl bg-zinc-950 px-4 text-xs font-extrabold text-white disabled:opacity-40 dark:bg-white dark:text-zinc-950"
+              >
+                {loading ? 'Buscando...' : 'Buscar'}
+              </button>
+            </form>
+          </div>
+        )}
+
+        {error && (
+          <p role="alert" className="mt-3 rounded-2xl bg-rose-50 px-3.5 py-2.5 text-xs font-semibold text-rose-700 dark:bg-rose-500/10 dark:text-rose-300">
+            {error}
+          </p>
+        )}
+
+        {/* Resultado del producto y ajuste de gramos */}
+        {product && scaled && (
+          <div className="mt-4 space-y-4">
+            <div className="rounded-2xl bg-zinc-100 p-3.5 dark:bg-zinc-800/70">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="font-bold leading-snug">{product.name}</p>
+                  <p className={`mt-0.5 font-mono text-[11px] ${muted}`}>
+                    #{product.code} · Por 100g: {Math.round(product.kcal100)} kcal · {fmt(product.p100, 1)}P · {fmt(product.c100, 1)}C · {fmt(product.g100, 1)}G
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => { setProduct(null); if (cameraSupported) startCamera(); }}
+                  className="shrink-0 rounded-full bg-zinc-200 px-2.5 py-1 text-[11px] font-bold dark:bg-zinc-700"
+                >
+                  Otro
+                </button>
+              </div>
+
+              {/* Ajuste de cantidad en gramos */}
+              <div className="mt-3 border-t border-zinc-200 pt-3 dark:border-zinc-700">
+                <div className="flex items-center justify-between gap-2">
+                  <label htmlFor="scan-grams" className="text-xs font-bold">Cantidad consumida</label>
+                  <div className="relative w-28">
+                    <input
+                      id="scan-grams"
+                      inputMode="decimal"
+                      value={grams}
+                      onChange={(e) => setGrams(e.target.value)}
+                      className={`${field} !h-9 w-full bg-white pr-7 text-center text-sm font-extrabold dark:bg-zinc-900`}
+                    />
+                    <span className={`pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-bold ${muted}`}>g</span>
+                  </div>
+                </div>
+
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {[50, 100, 150, 200].map((q) => (
+                    <button
+                      key={q}
+                      type="button"
+                      onClick={() => setGrams(String(q))}
+                      className={`rounded-full px-2.5 py-1 text-[11px] font-bold transition-colors ${
+                        gNum === q
+                          ? 'bg-zinc-950 text-white dark:bg-white dark:text-zinc-950'
+                          : 'bg-zinc-200 text-zinc-700 dark:bg-zinc-900 dark:text-zinc-300'
+                      }`}
+                    >
+                      {q}g
+                    </button>
+                  ))}
+                  {product.servingQty && product.servingQty > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setGrams(String(Math.round(product.servingQty)))}
+                      className={`rounded-full px-2.5 py-1 text-[11px] font-bold transition-colors ${
+                        gNum === Math.round(product.servingQty)
+                          ? 'bg-zinc-950 text-white dark:bg-white dark:text-zinc-950'
+                          : 'bg-zinc-200 text-zinc-700 dark:bg-zinc-900 dark:text-zinc-300'
+                      }`}
+                    >
+                      1 ración ({Math.round(product.servingQty)}g)
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Resumen de macros escalados */}
+            <div className="grid grid-cols-4 gap-2 text-center">
+              <div className="rounded-2xl bg-zinc-100 p-2.5 dark:bg-zinc-800/70">
+                <p className={`text-[10px] font-bold uppercase ${muted}`}>Calorías</p>
+                <p className="mt-1 text-base font-extrabold">{scaled.kcal}</p>
+              </div>
+              <div className="rounded-2xl bg-zinc-100 p-2.5 dark:bg-zinc-800/70">
+                <p className={`text-[10px] font-bold uppercase ${muted}`}>Prot.</p>
+                <p className="mt-1 text-base font-extrabold">{scaled.p}g</p>
+              </div>
+              <div className="rounded-2xl bg-zinc-100 p-2.5 dark:bg-zinc-800/70">
+                <p className={`text-[10px] font-bold uppercase ${muted}`}>Carbos</p>
+                <p className="mt-1 text-base font-extrabold">{scaled.c}g</p>
+              </div>
+              <div className="rounded-2xl bg-zinc-100 p-2.5 dark:bg-zinc-800/70">
+                <p className={`text-[10px] font-bold uppercase ${muted}`}>Grasas</p>
+                <p className="mt-1 text-base font-extrabold">{scaled.g}g</p>
+              </div>
+            </div>
+
+            <button type="button" onClick={confirmProduct} className={`${primary} !h-12 !text-sm`}>
+              Rellenar datos de comida
+            </button>
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
 const MEAL_TYPES = [
   ['Desayuno', Coffee],
   ['Comida', Sun],
@@ -2959,9 +3310,10 @@ const blank = { type: 'Desayuno', name: '', kcal: '', p: '', c: '', g: '' };
 const blankRecipe = { ...blank, desc: '' };
 
 export function Diet({ activeDate }) {
-  const { meals, goals, recipes = [], addMeal, deleteMeal, saveGoals, saveRecipes } = useGym();
+  const { meals, goals, recipes = [], addMeal, deleteMeal, saveGoals, saveRecipes, cravings = {}, saveCraving } = useGym();
   const [f, setF] = useState(blank);
   const [editing, setEditing] = useState(false);
+  const [scanning, setScanning] = useState(false);
   const myGoals = goals;
   const [g, setG] = useState(myGoals);
 
@@ -2971,6 +3323,13 @@ export function Diet({ activeDate }) {
   const [recipeForm, setRecipeForm] = useState({ id: '', ...blankRecipe });
 
   const currentDate = activeDate || iso();
+  const [craving, setCraving] = useState('');
+  useEffect(() => setCraving(cravings[currentDate] || ''), [currentDate, cravings]);
+  const submitCraving = (event) => {
+    event.preventDefault();
+    if (saveCraving) saveCraving(currentDate, craving);
+  };
+
   const list = meals.filter((m) => m.date === currentDate);
   const prevDay = new Date(`${currentDate}T00:00`);
   prevDay.setDate(prevDay.getDate() - 1);
@@ -2996,6 +3355,11 @@ export function Diet({ activeDate }) {
   };
 
   const loadRecipe = (r) => setF({ ...blank, type: r.type, name: r.name, kcal: r.kcal, p: r.p, c: r.c, g: r.g });
+
+  const handleScannedProduct = (scannedData) => {
+    setF((prev) => ({ ...prev, ...scannedData }));
+    setScanning(false);
+  };
 
   const submitRecipe = (e) => {
     e.preventDefault();
@@ -3023,6 +3387,19 @@ export function Diet({ activeDate }) {
 
   return (
     <div className="space-y-4">
+      <Card className="!p-4">
+        <div className="flex items-center gap-2">
+          <span className="flex size-7 items-center justify-center rounded-full bg-zinc-200 text-zinc-950 dark:bg-zinc-800 dark:text-white">
+            <Sparkles size={14} />
+          </span>
+          <p className={`text-xs font-semibold uppercase tracking-wider ${muted}`}>Lo que me apetece hoy</p>
+        </div>
+        <form onSubmit={submitCraving} className="mt-2.5 flex gap-2">
+          <input aria-label="Qué te apetece comer" placeholder="Ej. pollo con arroz, tortitas..." value={craving} maxLength={80} onChange={(e) => setCraving(e.target.value)} className={`${field} w-full min-w-0`} />
+          <button type="submit" aria-label="Guardar lo que me apetece" className="flex size-11 shrink-0 items-center justify-center rounded-full bg-zinc-950 text-white dark:bg-white dark:text-zinc-950"><Check size={18} /></button>
+        </form>
+      </Card>
+
       <Card>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -3152,21 +3529,34 @@ export function Diet({ activeDate }) {
       </section>
 
       <Card>
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <span className="flex size-8 items-center justify-center rounded-full bg-zinc-200 text-zinc-950 dark:bg-zinc-800 dark:text-white">
               {editingRecipes ? <Pencil size={15} /> : <Plus size={16} />}
             </span>
             <p className="font-bold">{editingRecipes ? 'Gestionar recetas' : 'Añadir comida'}</p>
           </div>
-          <button
-            type="button"
-            onClick={() => { setEditingRecipes(!editingRecipes); setRecipeForm({ id: '', ...blankRecipe }); }}
-            aria-label="Gestionar recetas"
-            className={`flex size-8 items-center justify-center rounded-full transition-colors ${editingRecipes ? 'bg-zinc-950 text-white dark:bg-white dark:text-zinc-950' : 'hover:bg-zinc-200 dark:hover:bg-zinc-800'}`}
-          >
-            {editingRecipes ? <X size={16} /> : <Pencil size={16} />}
-          </button>
+          <div className="flex items-center gap-1.5">
+            {!editingRecipes && (
+              <button
+                type="button"
+                onClick={() => setScanning(true)}
+                aria-label="Escanear código de barras"
+                className="inline-flex h-8 items-center gap-1.5 rounded-full bg-zinc-950 px-3 text-xs font-extrabold text-white transition-colors hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200"
+              >
+                <ScanBarcode size={14} />
+                Escanear
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => { setEditingRecipes(!editingRecipes); setRecipeForm({ id: '', ...blankRecipe }); }}
+              aria-label="Gestionar recetas"
+              className={`flex size-8 items-center justify-center rounded-full transition-colors ${editingRecipes ? 'bg-zinc-950 text-white dark:bg-white dark:text-zinc-950' : 'hover:bg-zinc-200 dark:hover:bg-zinc-800'}`}
+            >
+              {editingRecipes ? <X size={16} /> : <Pencil size={16} />}
+            </button>
+          </div>
         </div>
 
         {editingRecipes ? (
@@ -3313,6 +3703,13 @@ export function Diet({ activeDate }) {
           </>
         )}
       </Card>
+
+      {scanning && (
+        <BarcodeScanner
+          onClose={() => setScanning(false)}
+          onSelect={handleScannedProduct}
+        />
+      )}
     </div>
   );
 }
