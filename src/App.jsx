@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Download, Dumbbell, House, LogOut, Moon, Sun, TrendingUp, Upload, User, Users, Utensils, X } from 'lucide-react';
-import { iso, todayRoutine } from './lib';
+import { Check, Copy, Download, Dumbbell, House, LogOut, Moon, RefreshCw, Sun, TrendingUp, Upload, User, Users, Utensils } from 'lucide-react';
+import { friendCodeOf, iso, todayRoutine } from './lib';
 import { muted } from './ui';
 import { useGym } from './store';
 import { Diet, Friends, Home, Progress, Workout } from './screens';
@@ -8,24 +8,88 @@ import { Diet, Friends, Home, Progress, Workout } from './screens';
 const tabs = [['inicio', 'Inicio', House], ['amigos', 'Amigos', Users], ['entreno', 'Entreno', Dumbbell], ['progreso', 'Progreso', TrendingUp], ['dieta', 'Dieta', Utensils]];
 const screens = { inicio: Home, amigos: Friends, entreno: Workout, progreso: Progress, dieta: Diet };
 const btn = 'flex h-10 items-center justify-center rounded-full text-slate-800 transition-colors hover:bg-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 dark:text-slate-200 dark:hover:bg-zinc-800';
-const row = 'flex h-12 w-full items-center gap-3 rounded-2xl bg-zinc-200 px-4 text-sm font-semibold dark:bg-zinc-800';
+const row = 'flex h-13 w-full items-center gap-3.5 px-4 py-3.5 text-left text-sm font-semibold transition-colors active:bg-zinc-200/80 hover:bg-zinc-200/60 dark:active:bg-zinc-700/60 dark:hover:bg-zinc-800';
 
 export default function App() {
-  const { routines, user, logout, exportData, importData, draft } = useGym();
+  const { routines, user, logout, exportData, importData, draft, friendCode, regenerateFriendCode } = useGym();
   const [tab, setTab] = useState('inicio');
   const [routine, setRoutine] = useState(() => todayRoutine(routines));
   const [dark, setDark] = useState(() => localStorage.getItem('gym-theme') !== 'light');
   const [account, setAccount] = useState(false);
+  const [sheetVisible, setSheetVisible] = useState(false);
+  const [dragY, setDragY] = useState(0);
+  const [draggingSheet, setDraggingSheet] = useState(false);
+  const [copiedCode, setCopiedCode] = useState(false);
   const [notice, setNotice] = useState('');
   const [dateOffset, setDateOffset] = useState(0); // 0 = hoy, -1 = ayer, 1 = mañana...
   const touchStartX = useRef(null);
   const touchEndX = useRef(null);
+  const sheetStartY = useRef(null);
   const fileRef = useRef(null);
+
+  const myCode = friendCode || friendCodeOf(user);
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', dark);
     localStorage.setItem('gym-theme', dark ? 'dark' : 'light');
   }, [dark]);
+
+  const openAccount = () => {
+    setNotice('');
+    setCopiedCode(false);
+    setDragY(0);
+    setDraggingSheet(false);
+    setAccount(true);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => setSheetVisible(true));
+    });
+  };
+
+  const closeAccount = () => {
+    setDraggingSheet(false);
+    setSheetVisible(false);
+    setTimeout(() => {
+      setAccount(false);
+      setDragY(0);
+    }, 300);
+  };
+
+  useEffect(() => {
+    if (!account) return undefined;
+    const onKey = (e) => { if (e.key === 'Escape') closeAccount(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [account]);
+
+  const onSheetTouchStart = (e) => {
+    sheetStartY.current = e.touches[0].clientY;
+    setDraggingSheet(true);
+  };
+
+  const onSheetTouchMove = (e) => {
+    if (sheetStartY.current === null) return;
+    const delta = e.touches[0].clientY - sheetStartY.current;
+    // Seguimiento 1:1 hacia abajo y ligera resistencia elástica hacia arriba
+    setDragY(delta > 0 ? delta : delta * 0.18);
+  };
+
+  const onSheetTouchEnd = () => {
+    sheetStartY.current = null;
+    setDraggingSheet(false);
+    if (dragY > 90) {
+      closeAccount();
+    } else {
+      setDragY(0);
+    }
+  };
+
+  const copyFriendCode = async () => {
+    try {
+      await navigator.clipboard?.writeText(myCode);
+    } catch { /* ignorar si el navegador bloquea el portapapeles */ }
+    setCopiedCode(true);
+    setTimeout(() => setCopiedCode(false), 2000);
+  };
 
   const go = (next, r) => { if (r) setRoutine(r); setTab(next); };
   const Screen = screens[tab];
@@ -71,12 +135,19 @@ export default function App() {
     }
   };
 
+  const initials = (user?.name || 'U')
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0].toUpperCase())
+    .join('');
+
   return (
     <div className="min-h-screen overflow-x-hidden bg-white text-zinc-950 transition-colors dark:bg-black dark:text-white" onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}>
       <main className={`mx-auto max-w-md px-5 pt-8 ${tab !== 'entreno' ? 'pb-28' : 'pb-12'}`}>
         {/* Cabecera con botón de cuenta a la izquierda */}
         <div className="mt-3 flex items-center justify-between gap-2">
-          <button type="button" onClick={() => { setNotice(''); setAccount(true); }} aria-label="Mi cuenta" title="Mi cuenta" className="flex size-10 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-zinc-900 transition-colors hover:bg-zinc-200 dark:bg-zinc-900 dark:text-white dark:hover:bg-zinc-800">
+          <button type="button" onClick={openAccount} aria-label="Mi cuenta" title="Mi cuenta" className="flex size-10 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-zinc-900 transition-colors hover:bg-zinc-200 dark:bg-zinc-900 dark:text-white dark:hover:bg-zinc-800">
             <User size={20} />
           </button>
           <button type="button" onClick={() => setDateOffset(0)} disabled={dateOffset === 0} aria-label="Volver a hoy" className="min-w-0 flex-1 truncate text-center text-base font-semibold capitalize tracking-tight !text-2xl">{dayLabel}</button>
@@ -124,26 +195,104 @@ export default function App() {
         </div>
       )}
 
-      {/* Modal de cuenta de usuario */}
+      {/* Bottom Sheet deslizable estilo iPhone para el perfil */}
       {account && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-[2px]" onMouseDown={(e) => { if (e.target === e.currentTarget) setAccount(false); }}>
-          <section role="dialog" aria-modal="true" aria-labelledby="account-title" className="relative w-full max-w-md rounded-3xl bg-white p-6 shadow-xl dark:bg-zinc-900">
-            <button type="button" onClick={() => setAccount(false)} aria-label="Cerrar" className="absolute right-4 top-4 inline-flex size-8 items-center justify-center rounded-full text-slate-500 hover:bg-zinc-200 dark:text-slate-300 dark:hover:bg-zinc-800"><X size={17} /></button>
-            <h2 id="account-title" className="text-lg font-semibold">{user.name}</h2>
-            <p className={`text-sm ${muted}`}>{user.email}</p>
+        <div
+          className={`fixed inset-0 z-[60] flex items-end justify-center transition-colors duration-300 ${sheetVisible ? 'bg-slate-950/45 backdrop-blur-[2px]' : 'bg-slate-950/0'}`}
+          onMouseDown={(e) => { if (e.target === e.currentTarget) closeAccount(); }}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="account-title"
+            onTouchStart={onSheetTouchStart}
+            onTouchMove={onSheetTouchMove}
+            onTouchEnd={onSheetTouchEnd}
+            style={{
+              transform: sheetVisible ? `translateY(${dragY}px)` : 'translateY(100%)',
+              transition: draggingSheet ? 'none' : 'transform 300ms cubic-bezier(0.32, 0.72, 0, 1)',
+            }}
+            className="w-full max-w-md rounded-t-[32px] bg-white px-5 pb-[calc(1.75rem+env(safe-area-inset-bottom))] pt-3 shadow-[0_-12px_40px_rgba(0,0,0,0.18)] dark:bg-zinc-900 dark:shadow-[0_-12px_40px_rgba(0,0,0,0.75)]"
+          >
+            {/* Tirador superior (Grabber iOS) */}
+            <div className="mx-auto mb-4 h-1.5 w-10 rounded-full bg-zinc-300 dark:bg-zinc-700" aria-hidden="true" />
 
-            <div className="mt-5 space-y-2">
-              <button type="button" onClick={() => setDark((d) => !d)} className={row}>
-                {dark ? <Sun size={18} /> : <Moon size={18} />}
-                {dark ? 'Activar modo claro' : 'Activar modo oscuro'}
-              </button>
-              <button type="button" onClick={exportData} className={row}><Download size={18} />Descargar copia de seguridad</button>
-              <button type="button" onClick={() => fileRef.current?.click()} className={row}><Upload size={18} />Importar copia</button>
-              <input ref={fileRef} type="file" accept="application/json" onChange={onImport} className="hidden" aria-label="Archivo de copia" />
-              <button type="button" onClick={logout} className={`${row} text-rose-700 dark:text-rose-300`}><LogOut size={18} />Cerrar sesión</button>
+            {/* Cabecera del perfil */}
+            <div className="flex items-center justify-between gap-3 px-1">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="flex size-12 shrink-0 items-center justify-center rounded-full bg-zinc-950 text-sm font-extrabold text-white dark:bg-white dark:text-zinc-950">
+                  {initials}
+                </div>
+                <div className="min-w-0">
+                  <h2 id="account-title" className="truncate text-lg font-bold leading-tight">{user.name}</h2>
+                  <p className={`truncate text-xs ${muted}`}>{user.email}</p>
+                </div>
+              </div>
             </div>
 
-            {notice && <p role="status" className="mt-4 rounded-2xl bg-zinc-200 px-3 py-2 text-sm text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200">{notice}</p>}
+            {/* Código de amigo */}
+            <div className="mt-4 flex items-center justify-between gap-2 rounded-3xl bg-zinc-100 px-4 py-3 dark:bg-zinc-800/70">
+              <div className="min-w-0">
+                <p className={`text-[10px] font-bold uppercase tracking-wider ${muted}`}>Tu código de amigo</p>
+                <p className="mt-0.5 font-mono text-sm font-extrabold tracking-wider">{myCode}</p>
+              </div>
+              <div className="flex shrink-0 items-center gap-1.5">
+                {regenerateFriendCode && (
+                  <button
+                    type="button"
+                    onClick={regenerateFriendCode}
+                    aria-label="Generar nuevo código de amigo"
+                    title="Generar nuevo código"
+                    className="flex size-8 items-center justify-center rounded-full bg-white text-zinc-700 shadow-xs transition-colors hover:bg-zinc-200 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-700"
+                  >
+                    <RefreshCw size={13} />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={copyFriendCode}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-full bg-zinc-950 px-3 text-[11px] font-extrabold text-white transition-colors hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200"
+                >
+                  {copiedCode ? <Check size={12} /> : <Copy size={12} />}
+                  {copiedCode ? 'Copiado' : 'Copiar'}
+                </button>
+              </div>
+            </div>
+
+            {/* Grupo de opciones estilo iOS */}
+            <div className="mt-3 overflow-hidden rounded-3xl bg-zinc-100 divide-y divide-zinc-200/80 dark:bg-zinc-800/70 dark:divide-zinc-700/70">
+              <button type="button" onClick={() => setDark((d) => !d)} className={row}>
+                <span className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-white text-zinc-900 shadow-xs dark:bg-zinc-900 dark:text-white">
+                  {dark ? <Sun size={16} /> : <Moon size={16} />}
+                </span>
+                <span className="flex-1">{dark ? 'Activar modo claro' : 'Activar modo oscuro'}</span>
+              </button>
+              <button type="button" onClick={exportData} className={row}>
+                <span className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-white text-zinc-900 shadow-xs dark:bg-zinc-900 dark:text-white">
+                  <Download size={16} />
+                </span>
+                <span className="flex-1">Descargar copia de seguridad</span>
+              </button>
+              <button type="button" onClick={() => fileRef.current?.click()} className={row}>
+                <span className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-white text-zinc-900 shadow-xs dark:bg-zinc-900 dark:text-white">
+                  <Upload size={16} />
+                </span>
+                <span className="flex-1">Importar copia</span>
+              </button>
+              <input ref={fileRef} type="file" accept="application/json" onChange={onImport} className="hidden" aria-label="Archivo de copia" />
+            </div>
+
+            {/* Botón separado de cerrar sesión */}
+            <div className="mt-3 overflow-hidden rounded-3xl bg-zinc-100 dark:bg-zinc-800/70">
+              <button type="button" onClick={logout} className={`${row} text-rose-600 dark:text-rose-400`}>
+                <span className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-rose-500/10 text-rose-600 dark:text-rose-400">
+                  <LogOut size={16} />
+                </span>
+                <span className="flex-1">Cerrar sesión</span>
+              </button>
+            </div>
+
+            {notice && <p role="status" className="mt-4 rounded-2xl bg-zinc-200 px-3.5 py-2.5 text-center text-xs font-semibold text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200">{notice}</p>}
           </section>
         </div>
       )}
