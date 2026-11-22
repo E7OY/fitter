@@ -8,6 +8,13 @@ import './index.css';
 
 document.documentElement.classList.toggle('dark', localStorage.getItem('gym-theme') !== 'light');
 
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`, { scope: import.meta.env.BASE_URL })
+      .catch((error) => console.error('No se pudo registrar el service worker de fitter.', error));
+  });
+}
+
 function Root() {
   const [user, setUser] = useState(() => auth.current());
   if (!user) return <AuthScreen onAuth={setUser} />;
